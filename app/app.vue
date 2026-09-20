@@ -1,7 +1,17 @@
 <template>
-  <div class="p-8">
-    <h1 class="text-3xl font-bold text-blue-500 underline">
-      Tailwind is working!
-    </h1>
+  <div class="flex min-h-screen bg-[#fdfbf7]">
+    <!-- 1. Sidebar -->
+    <Sidebar />
+
+    <!-- 2. Main Layout Kanan -->
+    <div class="flex-1 flex flex-col min-h-screen">
+      <!-- Navbar Atas -->
+      <Navbar />
+
+      <!-- Area Konten Utama -->
+      <main class="p-8 flex-1">
+        <NuxtPage />
+      </main>
+    </div>
   </div>
 </template>
