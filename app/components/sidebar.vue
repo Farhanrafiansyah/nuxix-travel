@@ -1,11 +1,13 @@
 <script setup lang="ts">
+const route = useRoute()
+
 const menuItems = [
-  { label: 'Dashboard', icon: 'grid' },
-  { label: 'Perjalanan Dinas', icon: 'briefcase' },
-  { label: 'Uang Muka', icon: 'wallet' },
-  { label: 'Reimbursement', icon: 'receipt', badge: '1' },
-  { label: 'Notifikasi', icon: 'bell' },
-  { label: 'Profil', icon: 'user' }
+  { label: 'Dashboard', icon: 'grid', to: '/' },
+  { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/dinas' },
+  { label: 'Uang Muka', icon: 'wallet', to: '/uang-muka' },
+  { label: 'Reimbursement', icon: 'receipt', to: '/reimbursement', badge: '1' },
+  { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' },
+  { label: 'Profil', icon: 'user', to: '/profil' }
 ]
 
 const icons = {
@@ -41,24 +43,24 @@ const actions = [
       </div>
 
       <nav class="flex-1 space-y-1" aria-label="Menu utama">
-        <a
+        <NuxtLink
           v-for="item in menuItems"
           :key="item.label"
-          href="#"
+          :to="item.to"
           :class="[
             'group flex h-8 items-center gap-3 rounded-md px-3 text-[10px] font-medium transition-colors',
-            item.label === 'Dashboard'
+            route.path === item.to
               ? 'bg-[#394578] text-white'
               : 'text-blue-100 hover:bg-white/10 hover:text-white'
           ]"
-          :aria-current="item.label === 'Dashboard' ? 'page' : undefined"
+          :aria-current="route.path === item.to ? 'page' : undefined"
         >
           <span class="flex h-4 w-4 items-center justify-center" aria-hidden="true">
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="icons[item.icon as keyof typeof icons]" />
           </span>
           <span class="flex-1">{{ item.label }}</span>
           <span v-if="item.badge" class="flex h-3 min-w-3 items-center justify-center rounded-full bg-amber-400 px-1 text-[8px] font-bold text-[#1e295b]">{{ item.badge }}</span>
-        </a>
+        </NuxtLink>
       </nav>
 
       <div class="space-y-1 border-t border-white/10 pt-4">
