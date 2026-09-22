@@ -1,15 +1,17 @@
+<script setup lang="ts">
+const route = useRoute()
+</script>
+
 <template>
-  <div class="flex min-h-screen bg-[#fdfbf7]">
-    <!-- 1. Sidebar -->
+  <NuxtPage v-if="route.path === '/login'" />
+
+  <div v-else class="flex min-h-screen bg-[#fdfbf7]">
     <Sidebar />
 
-    <!-- 2. Main Layout Kanan -->
-    <div class="flex-1 flex flex-col min-h-screen">
-      <!-- Navbar Atas -->
+    <div class="flex min-h-screen flex-1 flex-col">
       <Navbar />
 
-      <!-- Area Konten Utama -->
-      <main class="p-8 flex-1">
+      <main class="flex-1 p-8">
         <NuxtPage />
       </main>
     </div>

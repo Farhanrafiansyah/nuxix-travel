@@ -2,7 +2,7 @@
 const route = useRoute()
 
 const menuItems = [
-  { label: 'Dashboard', icon: 'grid', to: '/' },
+  { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
   { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/dinas' },
   { label: 'Uang Muka', icon: 'wallet', to: '/uang-muka' },
   { label: 'Reimbursement', icon: 'receipt', to: '/reimbursement', badge: '1' },
@@ -23,8 +23,19 @@ const icons = {
 
 const actions = [
   { label: 'Ciutkan Menu', icon: 'collapse' },
-  { label: 'Keluar', icon: 'logout', danger: true }
+  { label: 'Keluar', icon: 'logout', danger: true, to: '/login' }
 ]
+
+const handleAction = async (action: (typeof actions)[number]) => {
+  if (action.to === '/login') {
+    const token = useCookie<string | null>('auth_token')
+    token.value = null
+  }
+
+  if (action.to) {
+    await navigateTo(action.to)
+  }
+}
 </script>
 
 <template>
@@ -67,6 +78,8 @@ const actions = [
         <button
           v-for="action in actions"
           :key="action.label"
+          type="button"
+          @click="handleAction(action)"
           :class="[
             'flex h-8 w-full items-center gap-3 rounded-md px-2 text-[10px] font-medium text-blue-100 transition-colors',
             action.danger ? 'hover:bg-rose-400/15 hover:text-rose-200' : 'hover:bg-white/10 hover:text-white'
