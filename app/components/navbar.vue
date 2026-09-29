@@ -1,14 +1,37 @@
+<script setup lang="ts">
+    const route = useRoute()
+  const currentUser = useCurrentUser()
+
+    const pageLabels: Record<string, string> = {
+      '/dashboard': 'Dashboard',
+      '/dinas': 'Perjalanan Dinas',
+      '/uang-muka': 'Uang Muka',
+      '/reimbursement': 'Reimbursement',
+      '/notifikasi': 'Notifikasi',
+      '/profil': 'Profil'
+    }
+
+    const currentPageLabel = computed(() => pageLabels[route.path] ?? 'Halaman')
+    const userInitials = computed(() => currentUser.value?.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || '--')
+</script>
+
 <template>
-  <header class="flex h-14 items-center justify-between border-b border-[#e9e5dc] bg-[#fdfbf7] px-6">
+  <header class="fixed inset-x-0 left-[190px] top-0 z-30 flex h-14 items-center justify-between border-b border-[#e9e5dc] bg-white px-6">
     <!-- 1. Breadcrumb (Kiri) -->
-    <div class="flex items-center gap-1.5 text-[10px] leading-none">
-      <span class="font-medium text-[#a6a29a]">Karyawan</span>
+    <div class="flex items-center gap-2 text-xs leading-none">
+      <span class="font-medium text-[#a6a29a]">{{ currentUser?.role || 'Akun' }}</span>
       <span class="text-[#c9c4ba]">/</span>
-      <span class="font-semibold text-[#272621]">Dashboard</span>
+      <span class="font-semibold text-[#272621]">{{ currentPageLabel }}</span>
     </div>
 
     <!-- 2. Search Bar (Tengah) -->
-    <div class="relative mx-6 w-full max-w-[300px]">
+    <div class="relative mx-6 hidden w-full max-w-[320px] sm:block">
       <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#a6a29a]">
         <!-- Search Icon -->
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -18,7 +41,7 @@
       <input
         type="text"
         placeholder="Cari ID, nama karyawan, atau tujuan..."
-        class="w-full rounded-full border border-[#e8e3da] bg-white/70 py-1.5 pl-8 pr-3 text-[9px] text-[#4d4a43] shadow-none outline-none transition-all placeholder:text-[#aaa59c] focus:border-[#c9c2b7] focus:bg-white"
+        class="w-full rounded-full border border-[#e8e3da] bg-white/70 py-2 pl-9 pr-3 text-[11px] text-[#4d4a43] shadow-none outline-none transition-all placeholder:text-[#aaa59c] focus:border-[#c9c2b7] focus:bg-white"
       />
     </div>
 
@@ -44,12 +67,12 @@
 
       <!-- User Profile Avatar & Name -->
       <div class="flex items-center gap-2 border-l border-[#e5e0d7] pl-3">
-        <div class="flex h-7 w-7 items-center justify-center rounded-full bg-[#d49a28] text-[9px] font-bold text-white">
-          NH
+        <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#d49a28] text-[10px] font-bold text-white">
+          {{ userInitials }}
         </div>
         <div class="flex flex-col text-left">
-          <span class="text-[9px] font-semibold leading-tight text-[#272621]">Nazwa Hasibuan</span>
-          <span class="text-[8px] leading-tight text-[#a6a29a]">Karyawan</span>
+          <span class="text-[11px] font-semibold leading-tight text-[#272621]">{{ currentUser?.name || 'Memuat profil...' }}</span>
+          <span class="text-[9px] leading-tight text-[#a6a29a]">{{ currentUser?.role || ' ' }}</span>
         </div>
       </div>
     </div>

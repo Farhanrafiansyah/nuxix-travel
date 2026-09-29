@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
+const currentUser = useCurrentUser()
 
 const menuItems = [
   { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
@@ -39,18 +40,23 @@ const handleAction = async (action: (typeof actions)[number]) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#fdfbf7]">
-    <aside class="flex min-h-screen w-60 shrink-0 flex-col bg-[#1e295b] px-3 py-5 text-white">
-      <div class="mb-9 flex items-center gap-2.5 px-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[#1e295b]">
+  <aside class="fixed inset-y-0 left-0 z-40 flex h-screen w-[190px] flex-col overflow-y-auto bg-[#171d4d] px-2.5 py-4 text-white">
+      <div class="mb-7 flex items-center gap-2.5 px-1.5">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#f6a623] text-white">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M5 17.5 12 4l7 13.5M8.2 13h7.6M6.8 16.5h10.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </div>
         <div>
-          <p class="text-sm font-bold leading-none tracking-tight">Nuvix Travel</p>
-          <p class="mt-1 text-[8px] font-medium uppercase leading-none tracking-[0.18em] text-blue-200">Corporate Travel</p>
+          <p class="text-xs font-bold leading-none">Nuvix Travel</p>
+          <p class="mt-1 text-[8px] font-medium leading-none text-blue-200">Corporate Travel System</p>
         </div>
+      </div>
+
+      <div class="mb-4 px-1.5">
+        <span class="inline-flex max-w-full truncate rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-medium text-blue-100">
+          {{ currentUser?.role || 'Akun' }}
+        </span>
       </div>
 
       <nav class="flex-1 space-y-1" aria-label="Menu utama">
@@ -59,36 +65,35 @@ const handleAction = async (action: (typeof actions)[number]) => {
           :key="item.label"
           :to="item.to"
           :class="[
-            'group flex h-8 items-center gap-3 rounded-md px-3 text-[10px] font-medium transition-colors',
+            'group flex min-h-9 items-center gap-2.5 rounded-md px-2.5 text-[11px] font-medium transition-colors',
             route.path === item.to
               ? 'bg-[#394578] text-white'
               : 'text-blue-100 hover:bg-white/10 hover:text-white'
           ]"
           :aria-current="route.path === item.to ? 'page' : undefined"
         >
-          <span class="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="icons[item.icon as keyof typeof icons]" />
+          <span class="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="icons[item.icon as keyof typeof icons]" />
           </span>
-          <span class="flex-1">{{ item.label }}</span>
-          <span v-if="item.badge" class="flex h-3 min-w-3 items-center justify-center rounded-full bg-amber-400 px-1 text-[8px] font-bold text-[#1e295b]">{{ item.badge }}</span>
+          <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+          <span v-if="item.badge" class="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-[#1e295b]">{{ item.badge }}</span>
         </NuxtLink>
       </nav>
 
-      <div class="space-y-1 border-t border-white/10 pt-4">
+      <div class="space-y-1 border-t border-white/10 pt-3">
         <button
           v-for="action in actions"
           :key="action.label"
           type="button"
           @click="handleAction(action)"
           :class="[
-            'flex h-8 w-full items-center gap-3 rounded-md px-2 text-[10px] font-medium text-blue-100 transition-colors',
+            'flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-[10px] font-medium text-blue-100 transition-colors',
             action.danger ? 'hover:bg-rose-400/15 hover:text-rose-200' : 'hover:bg-white/10 hover:text-white'
           ]"
         >
-          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="icons[action.icon as keyof typeof icons]" />
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="icons[action.icon as keyof typeof icons]" />
           <span>{{ action.label }}</span>
         </button>
       </div>
-    </aside>
-  </div>
+  </aside>
 </template>

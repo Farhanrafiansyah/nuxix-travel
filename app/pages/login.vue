@@ -32,6 +32,7 @@ const handleLogin = async () => {
     if (response.token) {
       const tokenCookie = useCookie('auth_token')
       tokenCookie.value = response.token
+      useCurrentUser().value = response.user
 
       navigateTo('/dashboard')
     }
