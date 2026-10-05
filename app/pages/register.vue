@@ -5,6 +5,7 @@ definePageMeta({
 
 const name = ref('')
 const email = ref('')
+const role = ref('')
 const department = ref('')
 const password = ref('')
 const isLoading = ref(false)
@@ -29,6 +30,7 @@ const handleRegister = async () => {
         name: name.value,
         email: email.value,
         password: password.value,
+        role: role.value,
         department: department.value
       }
     })
@@ -68,7 +70,7 @@ const handleRegister = async () => {
           <div class="flex h-14 w-14 items-center justify-center overflow-hidden bg-white shadow-lg">
             <img src="/favicon.ico" alt="Nuvix Travel" class="h-11 w-11 object-contain" />
           </div>
-          <div>
+          <div class="sm:col-span-2">
             <h1 class="font-serif text-[17px] font-bold leading-none tracking-tight">Nuvix Travel</h1>
             <p class="mt-1 text-[8px] uppercase tracking-[0.13em] text-[#aeb8e2]">Corporate Travel Management System</p>
           </div>
@@ -124,22 +126,22 @@ const handleRegister = async () => {
       <p class="relative text-[9px] text-[#7884ad]">© 2026 Nuvix Travel — Internal system, tidak untuk didistribusikan.</p>
     </section>
 
-    <section class="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10">
-      <div class="w-full max-w-[375px] rounded-[11px] border border-[#e6dfd2] bg-white px-6 py-7 shadow-[0_18px_38px_rgba(41,35,22,0.08)] sm:px-7 sm:py-8">
-        <div class="mb-4 inline-flex items-center gap-1.5 rounded-full bg-[#f8edc9] px-2.5 py-1 text-[8px] font-semibold text-[#86651d]">
+    <section class="flex min-h-screen items-center justify-center px-5 py-6 sm:px-10">
+      <div class="w-full max-w-[420px] rounded-[11px] border border-[#e6dfd2] bg-white px-5 py-5 shadow-[0_18px_38px_rgba(41,35,22,0.08)] sm:px-6 sm:py-6">
+        <div class="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[#f8edc9] px-2.5 py-1 text-[8px] font-semibold text-[#86651d]">
           <span aria-hidden="true">✦</span>
           Sistem Resmi Perjalanan Dinas Nuvix Group
         </div>
 
         <h3 class="font-serif text-[22px] font-bold leading-tight text-[#1c2237]">Buat akun Anda</h3>
-        <p class="mt-1.5 text-[10px] text-[#85837d]">Daftar untuk mulai mengelola perjalanan dinas perusahaan.</p>
+        <p class="mt-1 text-[10px] text-[#85837d]">Daftar untuk mulai mengelola perjalanan dinas perusahaan.</p>
 
-        <div class="mt-5 grid grid-cols-3 divide-x divide-[#e5dfd2] rounded-md border border-[#e5dfd2] bg-[#faf8f2]">
+        <div class="mt-3 grid grid-cols-3 divide-x divide-[#e5dfd2] rounded-md border border-[#e5dfd2] bg-[#faf8f2]">
           <button
             v-for="(tab, index) in featureTabs"
             :key="tab.label"
             type="button"
-            class="flex h-10 flex-col items-center justify-center gap-0.5 text-[7px] font-medium transition-colors"
+            class="flex h-9 flex-col items-center justify-center gap-0.5 text-[7px] font-medium transition-colors"
             :class="activeFeature === index ? 'text-[#b17c18]' : 'text-[#272725]'"
             @click="activeFeature = index"
           >
@@ -150,13 +152,13 @@ const handleRegister = async () => {
           </button>
         </div>
 
-        <form class="mt-5 space-y-3.5" @submit.prevent="handleRegister">
-          <div v-if="errorMessage" class="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-[10px] text-red-600">
+        <form class="mt-4 grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2" @submit.prevent="handleRegister">
+          <div v-if="errorMessage" class="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-[10px] text-red-600 sm:col-span-2">
             {{ errorMessage }}
           </div>
 
           <div>
-            <label for="name" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Nama lengkap</label>
+            <label for="name" class="mb-1 block text-[9px] font-semibold text-[#25262a]">Nama lengkap</label>
             <input
               id="name"
               v-model="name"
@@ -170,7 +172,7 @@ const handleRegister = async () => {
           </div>
 
           <div>
-            <label for="email" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Email</label>
+            <label for="email" class="mb-1 block text-[9px] font-semibold text-[#25262a]">Email</label>
             <input
               id="email"
               v-model="email"
@@ -183,7 +185,24 @@ const handleRegister = async () => {
           </div>
 
           <div>
-            <label for="department" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Departemen</label>
+            <label for="role" class="mb-1 block text-[9px] font-semibold text-[#25262a]">Peran</label>
+            <select
+              id="role"
+              v-model="role"
+              required
+              class="h-8 w-full rounded-md border border-[#e4ded3] bg-white px-3 text-[9px] text-[#31312e] outline-none transition-colors focus:border-[#b99035]"
+            >
+                <option value="" disabled>Pilih Peran</option>
+                <option value="Super Admin">Super Admin</option>
+                <option value="Karyawan">Karyawan</option>
+                <option value="Atasan">Atasan</option>
+                <option value="Admin Travel">Admin Travel</option>
+                <option value="Tim Keuangan">Tim Keuangan</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="department" class="mb-1 block text-[9px] font-semibold text-[#25262a]">Departemen</label>
             <select
               id="department"
               v-model="department"
@@ -200,8 +219,8 @@ const handleRegister = async () => {
             </select>
           </div>
 
-          <div>
-            <label for="password" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Password</label>
+          <div class="sm:col-span-2">
+            <label for="password" class="mb-1 block text-[9px] font-semibold text-[#25262a]">Password</label>
             <div class="relative">
               <input
                 id="password"
@@ -223,13 +242,13 @@ const handleRegister = async () => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="mt-2 h-10 w-full rounded-md bg-[#17204e] text-[9px] font-semibold text-white shadow-[0_5px_12px_rgba(23,32,78,0.18)] transition-colors hover:bg-[#202d69] disabled:cursor-wait disabled:opacity-60"
+            class="h-9 w-full rounded-md bg-[#17204e] text-[9px] font-semibold text-white shadow-[0_5px_12px_rgba(23,32,78,0.18)] transition-colors hover:bg-[#202d69] disabled:cursor-wait disabled:opacity-60 sm:col-span-2"
           >
             {{ isLoading ? 'Membuat akun...' : 'Daftar' }}
           </button>
         </form>
 
-        <div class="my-4 flex items-center gap-3">
+        <div class="my-3 flex items-center gap-3">
           <span class="h-px flex-1 bg-[#e8e1d6]" />
           <span class="text-[8px] text-[#918d83]">Sudah punya akun?</span>
           <NuxtLink to="/login" class="text-[8px] font-semibold text-[#bd861d] hover:underline">Masuk</NuxtLink>
