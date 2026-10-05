@@ -3,7 +3,9 @@ definePageMeta({
   layout: false
 })
 
+const name = ref('')
 const email = ref('')
+const department = ref('')
 const password = ref('')
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -16,16 +18,18 @@ const featureTabs = [
   { label: 'Reimbursement', icon: 'receipt' }
 ]
 
-const handleLogin = async () => {
+const handleRegister = async () => {
   isLoading.value = true
   errorMessage.value = ''
 
   try {
-    const response = await $fetch('http://localhost:8000/api/auth/login', {
+    const response = await $fetch('http://localhost:8000/api/auth/register', {
       method: 'POST',
       body: {
+        name: name.value,
         email: email.value,
-        password: password.value
+        password: password.value,
+        department: department.value
       }
     })
 
@@ -37,8 +41,15 @@ const handleLogin = async () => {
       navigateTo('/dashboard')
     }
   } catch (error) {
-    console.error('Login Error:', error)
-    errorMessage.value = error.data?.message || 'Gagal login. Periksa email dan password Anda.'
+    console.error('Register Error:', error)
+    const responseData = typeof error === 'object' && error !== null && 'data' in error
+      ? error.data
+      : undefined
+    const message = typeof responseData === 'object' && responseData !== null
+      && 'message' in responseData && typeof responseData.message === 'string'
+      ? responseData.message
+      : undefined
+    errorMessage.value = message || 'Gagal membuat akun. Silakan periksa data Anda dan coba lagi.'
   } finally {
     isLoading.value = false
   }
@@ -120,8 +131,8 @@ const handleLogin = async () => {
           Sistem Resmi Perjalanan Dinas Nuvix Group
         </div>
 
-        <h3 class="font-serif text-[22px] font-bold leading-tight text-[#1c2237]">Masuk ke akun Anda</h3>
-        <p class="mt-1.5 text-[10px] text-[#85837d]">Kelola perjalanan dinas perusahaan Anda dengan mudah.</p>
+        <h3 class="font-serif text-[22px] font-bold leading-tight text-[#1c2237]">Buat akun Anda</h3>
+        <p class="mt-1.5 text-[10px] text-[#85837d]">Daftar untuk mulai mengelola perjalanan dinas perusahaan.</p>
 
         <div class="mt-5 grid grid-cols-3 divide-x divide-[#e5dfd2] rounded-md border border-[#e5dfd2] bg-[#faf8f2]">
           <button
@@ -139,13 +150,27 @@ const handleLogin = async () => {
           </button>
         </div>
 
-        <form class="mt-5 space-y-3.5" @submit.prevent="handleLogin">
+        <form class="mt-5 space-y-3.5" @submit.prevent="handleRegister">
           <div v-if="errorMessage" class="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-[10px] text-red-600">
             {{ errorMessage }}
           </div>
 
           <div>
-            <label for="email" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Email / NIP</label>
+            <label for="name" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Nama lengkap</label>
+            <input
+              id="name"
+              v-model="name"
+              type="text"
+              required
+              minlength="2"
+              autocomplete="name"
+              placeholder="Nama lengkap Anda"
+              class="h-8 w-full rounded-md border border-[#e4ded3] bg-white px-3 text-[9px] text-[#31312e] outline-none transition-colors placeholder:text-[#a7a39a] focus:border-[#b99035]"
+            />
+          </div>
+
+          <div>
+            <label for="email" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Email</label>
             <input
               id="email"
               v-model="email"
@@ -158,6 +183,24 @@ const handleLogin = async () => {
           </div>
 
           <div>
+            <label for="department" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Departemen</label>
+            <select
+              id="department"
+              v-model="department"
+              required
+              class="h-8 w-full rounded-md border border-[#e4ded3] bg-white px-3 text-[9px] text-[#31312e] outline-none transition-colors focus:border-[#b99035]"
+            >
+                <option value="" disabled>Pilih departemen</option>
+                <option value="IT">IT</option>
+                <option value="Sales">Sales</option>
+                <option value="Operations">Operations</option>
+                <option value="Logistik">Logistik</option>
+                <option value="Human Resources">Human Resources</option>
+                <option value="Finance">Finance</option>
+            </select>
+          </div>
+
+          <div>
             <label for="password" class="mb-1.5 block text-[9px] font-semibold text-[#25262a]">Password</label>
             <div class="relative">
               <input
@@ -166,8 +209,8 @@ const handleLogin = async () => {
                 :type="showPassword ? 'text' : 'password'"
                 required
                 minlength="6"
-                autocomplete="current-password"
-                placeholder="Masukkan password Anda"
+                autocomplete="new-password"
+                placeholder="Buat password (minimal 6 karakter)"
                 class="h-8 w-full rounded-md border border-[#e4ded3] bg-white px-3 pr-9 text-[9px] text-[#31312e] outline-none transition-colors placeholder:text-[#a7a39a] focus:border-[#b99035]"
               />
               <button type="button" class="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-[#77736a]" :aria-label="showPassword ? 'Sembunyikan password' : 'Tampilkan password'" @click="showPassword = !showPassword">
@@ -177,27 +220,19 @@ const handleLogin = async () => {
             </div>
           </div>
 
-          <div class="flex items-center justify-between pt-1 text-[8px]">
-            <label class="flex cursor-pointer items-center gap-1.5 text-[#77756f]">
-              <input type="checkbox" class="h-3 w-3 rounded border-[#d8d2c7] text-[#17204e] focus:ring-0" />
-              <span>Ingat saya</span>
-            </label>
-            <button type="button" class="font-medium text-[#bd861d] hover:underline">Lupa password?</button>
-          </div>
-
           <button
             type="submit"
             :disabled="isLoading"
             class="mt-2 h-10 w-full rounded-md bg-[#17204e] text-[9px] font-semibold text-white shadow-[0_5px_12px_rgba(23,32,78,0.18)] transition-colors hover:bg-[#202d69] disabled:cursor-wait disabled:opacity-60"
           >
-            {{ isLoading ? 'Memproses...' : 'Masuk' }}
+            {{ isLoading ? 'Membuat akun...' : 'Daftar' }}
           </button>
         </form>
 
         <div class="my-4 flex items-center gap-3">
           <span class="h-px flex-1 bg-[#e8e1d6]" />
-          <span class="text-[8px] text-[#918d83]">Belum punya akun?</span>
-          <NuxtLink to="/register" class="text-[8px] font-semibold text-[#bd861d] hover:underline">Buat akun</NuxtLink>
+          <span class="text-[8px] text-[#918d83]">Sudah punya akun?</span>
+          <NuxtLink to="/login" class="text-[8px] font-semibold text-[#bd861d] hover:underline">Masuk</NuxtLink>
           <span class="h-px flex-1 bg-[#e8e1d6]" />
         </div>
 

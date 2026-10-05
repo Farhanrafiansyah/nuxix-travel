@@ -27,7 +27,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <NuxtPage v-if="route.path === '/login'" />
+  <NuxtPage v-if="route.path === '/login' || route.path === '/register'" />
 
   <div v-else class="flex min-h-screen bg-[#fdfbf7]">
     <Sidebar />
