@@ -80,7 +80,7 @@ onMounted(async () => {
   }
 
   try {
-    const response = await $fetch<{ requests: TravelRequest[] }>('http://localhost:8000/api/travels/my-requests', {
+    const response = await $fetch<{ requests: TravelRequest[] }>('http://localhost:8000/api/travels/dashboard', {
       headers: { Authorization: `Bearer ${authToken.value}` }
     })
     requests.value = response.requests
