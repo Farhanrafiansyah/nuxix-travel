@@ -2,23 +2,24 @@
     const route = useRoute()
   const currentUser = useCurrentUser()
 
-    const pageLabels: Record<string, string> = {
-      '/dashboard': 'Dashboard',
-      '/dinas': 'Perjalanan Dinas',
-      '/uang-muka': 'Uang Muka',
-      '/reimbursement': 'Reimbursement',
-      '/notifikasi': 'Notifikasi',
-      '/profil': 'Profil'
-    }
+  const pageLabels: Record<string, string> = {
+    '/dashboard': 'Dashboard',
+    '/dinas': 'Perjalanan Dinas',
+    '/uang-muka': 'Uang Muka',
+    '/reimbursement': 'Reimbursement',
+    '/reimbursement-ajukan': 'Ajukan Reimbursement',
+    '/notifikasi': 'Notifikasi',
+    '/profil': 'Profil'
+  }
 
-    const currentPageLabel = computed(() => pageLabels[route.path] ?? 'Halaman')
-    const userInitials = computed(() => currentUser.value?.name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase() || '--')
+  const currentPageLabel = computed(() => pageLabels[route.path] ?? 'Halaman')
+  const userInitials = computed(() => currentUser.value?.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || '--')
 </script>
 
 <template>

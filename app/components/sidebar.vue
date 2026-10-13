@@ -6,10 +6,13 @@ const menuItems = [
   { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
   { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/dinas' },
   { label: 'Uang Muka', icon: 'wallet', to: '/uang-muka' },
-  { label: 'Reimbursement', icon: 'receipt', to: '/reimbursement', badge: '1' },
+  { label: 'Reimbursement', icon: 'receipt', to: '/reimbursement', badge: '1', activePaths: ['/reimbursement-ajukan'] },
   { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' },
   { label: 'Profil', icon: 'user', to: '/profil' }
 ]
+
+const isMenuItemActive = (item: (typeof menuItems)[number]) =>
+  route.path === item.to || ('activePaths' in item && item.activePaths.includes(route.path))
 
 const icons = {
   grid: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
@@ -37,6 +40,8 @@ const handleAction = async (action: (typeof actions)[number]) => {
     await navigateTo(action.to)
   }
 }
+
+
 </script>
 
 <template>
@@ -66,11 +71,11 @@ const handleAction = async (action: (typeof actions)[number]) => {
           :to="item.to"
           :class="[
             'group flex min-h-9 items-center gap-2.5 rounded-md px-2.5 text-[11px] font-medium transition-colors',
-            route.path === item.to
+            isMenuItemActive(item)
               ? 'bg-[#394578] text-white'
               : 'text-blue-100 hover:bg-white/10 hover:text-white'
           ]"
-          :aria-current="route.path === item.to ? 'page' : undefined"
+          :aria-current="isMenuItemActive(item) ? 'page' : undefined"
         >
           <span class="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="icons[item.icon as keyof typeof icons]" />
