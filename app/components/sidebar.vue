@@ -4,7 +4,7 @@ const currentUser = useCurrentUser()
 
 const menuItems = [
   { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
-  { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/dinas' },
+  { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/dinas', activePaths: ['/dinas-ajukan'] },
   { label: 'Uang Muka', icon: 'wallet', to: '/uang-muka' },
   { label: 'Reimbursement', icon: 'receipt', to: '/reimbursement', badge: '1', activePaths: ['/reimbursement-ajukan'] },
   { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' },

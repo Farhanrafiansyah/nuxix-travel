@@ -104,6 +104,12 @@ const submitReimbursement = async () => {
     return
   }
 
+  const travelId = Number(selectedTravelId.value)
+  if (!Number.isInteger(travelId) || travelId <= 0) {
+    submitError.value = 'Perjalanan yang dipilih tidak valid. Silakan pilih ulang.'
+    return
+  }
+
   if (!expenseDate.value) {
     submitError.value = 'Tanggal pengeluaran wajib diisi.'
     return
@@ -115,14 +121,12 @@ const submitReimbursement = async () => {
   }
 
   const formData = new FormData()
-  formData.append('items', JSON.stringify({
-    items: expenses.value.map((expense) => ({
-      category: expense.category,
-      description: expense.description.trim(),
-      amount: Number(expense.amount),
-      expense_date: expenseDate.value || undefined
-    }))
-  }))
+  formData.append('items', JSON.stringify(expenses.value.map((expense) => ({
+    category: expense.category,
+    description: expense.description.trim(),
+    amount: Number(expense.amount),
+    expense_date: expenseDate.value
+  }))))
   if (receiptFile.value) {
     formData.append('receipt_file', receiptFile.value)
   }
@@ -131,7 +135,7 @@ const submitReimbursement = async () => {
 
   try {
     const response = await $fetch<{ message: string }>(
-      `http://localhost:8000/api/reimbursements/${selectedTravelId.value}`,
+      `http://localhost:8000/api/reimbursements/${travelId}`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${authToken.value}` },
@@ -140,18 +144,7 @@ const submitReimbursement = async () => {
     )
     successMessage.value = response.message || 'Pengajuan reimbursement berhasil dikirim!'
   } catch (error) {
-    const fetchError = error as {
-      status?: number
-      statusCode?: number
-      data?: {
-        message?: string
-        error?: string
-        details?: {
-          formErrors?: string[]
-          fieldErrors?: Record<string, string[]>
-        }
-      }
-    }
+    const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
     const statusCode = fetchError.statusCode ?? fetchError.status
 
     if (statusCode === 401) {
@@ -160,13 +153,9 @@ const submitReimbursement = async () => {
       return
     }
 
-    const detailMsg = fetchError.data?.details?.formErrors?.[0]
-      || Object.values(fetchError.data?.details?.fieldErrors || {})[0]?.[0]
-
-    submitError.value = fetchError.data?.message
-      || detailMsg
-      || fetchError.data?.error
-      || 'Pengajuan reimbursement belum dapat dikirim.'
+    submitError.value = fetchError.data?.message === 'Travel id must be a number.'
+      ? 'Perjalanan yang dipilih tidak valid. Silakan pilih ulang.'
+      : fetchError.data?.message || 'Pengajuan reimbursement belum dapat dikirim.'
   } finally {
     isSubmitting.value = false
   }

@@ -5,6 +5,7 @@
   const pageLabels: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/dinas': 'Perjalanan Dinas',
+    '/dinas-ajukan': 'Ajukan Perjalanan Dinas',
     '/uang-muka': 'Uang Muka',
     '/reimbursement': 'Reimbursement',
     '/reimbursement-ajukan': 'Ajukan Reimbursement',

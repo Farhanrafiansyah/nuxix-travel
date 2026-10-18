@@ -150,13 +150,9 @@ onMounted(async () => {
         <p class="mt-0.5 text-xs font-normal text-[#777b87]">Semua riwayat pengajuan perjalanan dinas kamu</p>
       </div>
 
-      <button
-        type="button"
-        class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]"
-      >
-        <span class="text-base font-bold leading-none">+</span>
-        <span>Ajukan Baru</span>
-      </button>
+      <NuxtLink to="/dinas-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
+    Ajukan Perjalanan Dinas
+  </NuxtLink>
     </div>
 
     <!-- Filter row: Status, Bulan, Search, Ekspor -->

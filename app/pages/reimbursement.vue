@@ -1,44 +1,27 @@
 <script setup lang="ts">
-type ReimbursementStatus = 'SUBMITTED' | 'VERIFIED' | 'PAID' | 'REJECTED'
+type ReimbursementStatus = 'SUBMITTED' | 'NEEDS_DOCUMENTS' | 'VERIFIED' | 'PAID' | 'REJECTED'
 
-type Reimbursement = {
-  id: string
-  destination: string
-  totalAmount: number
-  receiptComplete: boolean
+type ReimbursementRecord = {
+  id: number
+  travel_request_id: number
+  total_amount: string
   status: ReimbursementStatus
-  date: string
+  created_at: string
+  travelRequest: { destination: string } | null
 }
 
-const reimbursements: Reimbursement[] = [
-  {
-    id: '',
-    destination: 'Jakarta',
-    totalAmount: 7250000,
-    receiptComplete: true,
-    status: 'PAID',
-    date: ''
-  },
-  {
-    id: '',
-    destination: 'Singapore',
-    totalAmount: 11850000,
-    receiptComplete: true,
-    status: 'VERIFIED',
-    date: ''
-  },
-  {
-    id: '',
-    destination: 'Bali',
-    totalAmount: 6400000,
-    receiptComplete: true,
-    status: 'SUBMITTED',
-    date: ''
-  }
-]
+type Reimbursement = Omit<ReimbursementRecord, 'travelRequest'> & {
+  destination: string
+}
+
+const authToken = useCookie<string | null>('auth_token')
+const reimbursements = ref<Reimbursement[]>([])
+const isLoading = ref(true)
+const loadError = ref('')
 
 const statusLabels: Record<ReimbursementStatus, string> = {
   SUBMITTED: 'Menunggu Verifikasi',
+  NEEDS_DOCUMENTS: 'Bukti Kurang',
   VERIFIED: 'Terverifikasi',
   PAID: 'Selesai',
   REJECTED: 'Dikembalikan'
@@ -46,6 +29,7 @@ const statusLabels: Record<ReimbursementStatus, string> = {
 
 const statusStyles: Record<ReimbursementStatus, string> = {
   SUBMITTED: 'bg-[#fbf1df] text-[#b77912]',
+  NEEDS_DOCUMENTS: 'bg-[#fff4d6] text-[#9a6700]',
   VERIFIED: 'bg-[#e8f0fb] text-[#3566a8]',
   PAID: 'bg-[#e3f2e9] text-[#287849]',
   REJECTED: 'bg-[#fcebea] text-[#c5392f]'
@@ -59,12 +43,12 @@ const pageSize = 5
 const filteredReimbursements = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase('id-ID')
 
-  return reimbursements.filter((reimbursement) => {
+  return reimbursements.value.filter((reimbursement) => {
     const matchesStatus = selectedStatus.value === 'ALL' || reimbursement.status === selectedStatus.value
     const matchesQuery = !query || [
-      reimbursement.id,
+      `RB-${String(reimbursement.id).padStart(4, '0')}`,
       reimbursement.destination,
-      reimbursement.totalAmount.toString(),
+      reimbursement.total_amount,
       statusLabels[reimbursement.status]
     ].some((value) => value.toLocaleLowerCase('id-ID').includes(query))
 
@@ -72,7 +56,7 @@ const filteredReimbursements = computed(() => {
   })
 })
 
-const totalPages = computed(() => Math.ceil(filteredReimbursements.value.length / pageSize))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredReimbursements.value.length / pageSize)))
 const visibleReimbursements = computed(() => {
   const start = (currentPage.value - 1) * pageSize
   return filteredReimbursements.value.slice(start, start + pageSize)
@@ -91,6 +75,49 @@ const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', {
   currency: 'IDR',
   maximumFractionDigits: 0
 }).format(amount)
+
+const formatDate = (value: string) => new Intl.DateTimeFormat('id-ID', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric'
+}).format(new Date(value))
+
+onMounted(async () => {
+  if (!authToken.value) {
+    await navigateTo('/login')
+    return
+  }
+
+  try {
+    const headers = { Authorization: `Bearer ${authToken.value}` }
+    const response = await $fetch<{ reimbursements: ReimbursementRecord[] }>(
+      'http://localhost:8000/api/reimbursements/my',
+      { headers }
+    )
+
+    reimbursements.value = response.reimbursements.map((reimbursement) => ({
+      id: reimbursement.id,
+      travel_request_id: reimbursement.travel_request_id,
+      total_amount: reimbursement.total_amount,
+      status: reimbursement.status,
+      created_at: reimbursement.created_at,
+      destination: reimbursement.travelRequest?.destination || `Perjalanan #${reimbursement.travel_request_id}`
+    }))
+  } catch (error) {
+    const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
+    const statusCode = fetchError.statusCode ?? fetchError.status
+
+    if (statusCode === 401) {
+      authToken.value = null
+      await navigateTo('/login')
+      return
+    }
+
+    loadError.value = fetchError.data?.message || 'Data reimbursement belum dapat dimuat dari server.'
+  } finally {
+    isLoading.value = false
+  }
+})
 </script>
 
 <template>
@@ -98,7 +125,7 @@ const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', {
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Reimbursement Saya</h1>
-        <p class="text-xs font-medium text-[#777b87]">Kelola pengajuan penggantian biaya perjalanan dinas.</p>
+        <p class="text-xs font-medium text-[#777b87]">Daftar dan status pengajuan reimbursement Anda.</p>
       </div>
         <NuxtLink to="/reimbursement-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
     Ajukan Reimbursement
@@ -115,6 +142,7 @@ const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', {
           >
             <option value="ALL">Status: Semua</option>
             <option value="SUBMITTED">Menunggu Verifikasi</option>
+            <option value="NEEDS_DOCUMENTS">Bukti Kurang</option>
             <option value="VERIFIED">Terverifikasi</option>
             <option value="PAID">Selesai</option>
             <option value="REJECTED">Dikembalikan</option>
@@ -153,32 +181,36 @@ const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="reimbursement in visibleReimbursements" :key="`${reimbursement.destination}-${reimbursement.status}`" class="border-t border-[#eee7dc] text-[#171717]">
-              <td class="whitespace-nowrap px-3 py-2.5 font-medium">{{ reimbursement.id }}</td>
+            <tr v-if="isLoading">
+              <td colspan="7" class="px-4 py-10 text-center text-[10px] text-[#8b877f]">
+                Memuat data reimbursement...
+              </td>
+            </tr>
+            <tr v-else-if="loadError">
+              <td colspan="7" class="px-4 py-10 text-center text-[10px] text-[#c5392f]">
+                {{ loadError }}
+              </td>
+            </tr>
+            <tr v-else v-for="reimbursement in visibleReimbursements" :key="reimbursement.id" class="border-t border-[#eee7dc] text-[#171717]">
+              <td class="whitespace-nowrap px-3 py-2.5 font-medium">RB-{{ String(reimbursement.id).padStart(4, '0') }}</td>
               <td class="whitespace-nowrap px-3 py-2.5">{{ reimbursement.destination }}</td>
-              <td class="whitespace-nowrap px-3 py-2.5 font-medium">{{ formatCurrency(reimbursement.totalAmount) }}</td>
+              <td class="whitespace-nowrap px-3 py-2.5 font-medium">{{ formatCurrency(Number(reimbursement.total_amount)) }}</td>
               <td class="px-3 py-2.5">
-                <span
-                  v-if="reimbursement.receiptComplete"
-                  class="inline-flex rounded px-1.5 py-0.5 text-[8px] font-semibold"
-                  :class="statusStyles.PAID"
-                >
-                  Lengkap
-                </span>
+                <span class="text-[#8c887f]" title="Status bukti belum disediakan oleh API">—</span>
               </td>
               <td class="px-3 py-2.5">
                 <span class="inline-flex whitespace-nowrap rounded px-1.5 py-0.5 text-[8px] font-semibold" :class="statusStyles[reimbursement.status]">
                   {{ statusLabels[reimbursement.status] }}
                 </span>
               </td>
-              <td class="whitespace-nowrap px-3 py-2.5 text-[#77736a]">{{ reimbursement.date }}</td>
+              <td class="whitespace-nowrap px-3 py-2.5 text-[#77736a]">{{ formatDate(reimbursement.created_at) }}</td>
               <td class="px-3 py-2 text-center">
                 <button type="button" class="rounded border border-[#e8e1d6] bg-white px-2 py-1 text-[8px] font-medium text-[#171717] hover:bg-[#faf9f6]">
                   Detail
                 </button>
               </td>
             </tr>
-            <tr v-if="visibleReimbursements.length === 0">
+            <tr v-if="!isLoading && !loadError && visibleReimbursements.length === 0">
               <td colspan="7" class="px-4 py-10 text-center text-[10px] text-[#8b877f]">
                 Tidak ada data reimbursement yang cocok.
               </td>

@@ -5,9 +5,36 @@ type TravelRequest = {
   start_date: string
   end_date: string
   purpose: string
+  transportation_mode: string | null
   document_url: string | null
   status: string
+  lpj_status: string
   created_at?: string
+}
+
+type DashboardSummary = {
+  cash_advance_running: number
+  cash_advance_returned: number
+  travel_quota: {
+    year: number
+    used: number
+    limit: number
+    remaining: number
+  }
+  reminders: {
+    travel_id: number
+    destination: string
+    lpj_reminder: string | null
+    cash_advance_reminder: string | null
+  }[]
+}
+
+type ActionItem = {
+  id: string
+  title: string
+  description: string
+  actionLabel: string
+  to: string
 }
 
 const summaryCards = [
@@ -17,9 +44,10 @@ const summaryCards = [
   { key: 'returned', label: 'Sisa Dikembalikan', icon: 'return', tone: 'bg-rose-50 text-rose-600' }
 ]
 
-const emptyTableColumns = ['Tujuan', 'Tanggal', 'Keperluan', 'Transportasi', 'Status', 'Aksi']
-const actionItems = ref<{ id: string; title: string; description: string; actionLabel: string }[]>([])
+const emptyTableColumns = ['Tujuan', 'Tanggal', 'Keperluan', 'Transportasi', 'Status', 'LPJ', 'Aksi']
+const actionItems = ref<ActionItem[]>([])
 const requests = ref<TravelRequest[]>([])
+const dashboardSummary = ref<DashboardSummary | null>(null)
 const isLoading = ref(true)
 const loadError = ref('')
 const authToken = useCookie<string | null>('auth_token')
@@ -34,11 +62,22 @@ const upcomingRequests = computed(() => requests.value
     && new Date(request.start_date).getTime() >= new Date(new Date().toDateString()).getTime())
   .sort((first, second) => new Date(first.start_date).getTime() - new Date(second.start_date).getTime()))
 
+const quotaProgress = computed(() => {
+  const quota = dashboardSummary.value?.travel_quota
+  return quota?.limit ? Math.min(100, (quota.used / quota.limit) * 100) : 0
+})
+
+const formatCurrency = (amount: number) => new Intl.NumberFormat('id-ID', {
+  style: 'currency',
+  currency: 'IDR',
+  maximumFractionDigits: 0
+}).format(amount)
+
 const summaryValues = computed(() => ({
   active: requests.value.filter((request) => ['APPROVED', 'FULFILLED'].includes(request.status)).length,
   pending: requests.value.filter((request) => request.status === 'PENDING').length,
-  advance: '—',
-  returned: '—'
+  advance: dashboardSummary.value ? formatCurrency(dashboardSummary.value.cash_advance_running) : '—',
+  returned: dashboardSummary.value ? formatCurrency(dashboardSummary.value.cash_advance_returned) : '—'
 }))
 
 const formatDate = (date: string) => new Intl.DateTimeFormat('id-ID', {
@@ -80,10 +119,37 @@ onMounted(async () => {
   }
 
   try {
-    const response = await $fetch<{ requests: TravelRequest[] }>('http://localhost:8000/api/travels/dashboard', {
+    const response = await $fetch<{ requests: TravelRequest[] }>('http://localhost:8000/api/travels/my-requests', {
       headers: { Authorization: `Bearer ${authToken.value}` }
     })
     requests.value = response.requests
+
+    const summary = await $fetch<DashboardSummary>('http://localhost:8000/api/dashboard/my-summary', {
+      headers: { Authorization: `Bearer ${authToken.value}` }
+    })
+    dashboardSummary.value = summary
+    actionItems.value = summary.reminders.flatMap((reminder) => {
+      const items: ActionItem[] = []
+      if (reminder.lpj_reminder) {
+        items.push({
+          id: `${reminder.travel_id}-lpj`,
+          title: `Selesaikan LPJ perjalanan ke ${reminder.destination}`,
+          description: reminder.lpj_reminder,
+          actionLabel: 'Lihat perjalanan',
+          to: '/dinas'
+        })
+      }
+      if (reminder.cash_advance_reminder) {
+        items.push({
+          id: `${reminder.travel_id}-advance`,
+          title: `Kembalikan sisa uang muka perjalanan ke ${reminder.destination}`,
+          description: reminder.cash_advance_reminder,
+          actionLabel: 'Lihat uang muka',
+          to: '/uang-muka'
+        })
+      }
+      return items
+    })
   } catch (error) {
     const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
     const statusCode = fetchError.statusCode ?? fetchError.status
@@ -108,10 +174,10 @@ onMounted(async () => {
         <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Dashboard Karyawan</h1>
         <p class="text-xs font-medium text-[#777b87]">Semua riwayat pengajuan perjalanan dinas kamu</p>
       </div>
-      <button type="button" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
+      <NuxtLink to="/dinas-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
         Ajukan Perjalanan
-      </button>
+      </NuxtLink>
     </div>
 
     <section class="rounded-lg border border-[#eadfce] bg-white p-5 shadow-[0_3px_12px_rgba(28,28,45,0.04)]" aria-labelledby="action-heading">
@@ -119,19 +185,22 @@ onMounted(async () => {
         <span class="h-2 w-2 rounded-full bg-[#f5a623]" aria-hidden="true" />
         Perlu Tindakan Kamu
       </h2>
-      <div v-if="actionItems.length" class="mt-4 space-y-2">
+      <div v-if="isLoading" class="mt-4 flex min-h-16 items-center justify-center rounded-md border border-dashed border-[#e8e4de] bg-[#fdfcf9] px-4 text-center">
+        <p class="text-xs text-[#858893]">Memuat pengingat...</p>
+      </div>
+      <div v-else-if="actionItems.length" class="mt-4 space-y-2">
         <article v-for="item in actionItems" :key="item.id" class="flex items-center justify-between gap-4 rounded-md border border-[#e8e4de] bg-[#fdfcf9] px-4 py-3">
           <div class="min-w-0">
             <h3 class="truncate text-xs font-semibold text-[#20233e]">{{ item.title }}</h3>
             <p class="mt-1 text-[11px] text-[#858893]">{{ item.description }}</p>
           </div>
-          <button type="button" class="shrink-0 rounded-md border border-[#dedbd5] bg-white px-3 py-2 text-[10px] font-medium text-[#20233e] hover:bg-[#f7f5f0]">
+          <NuxtLink :to="item.to" class="shrink-0 rounded-md border border-[#dedbd5] bg-white px-3 py-2 text-[10px] font-medium text-[#20233e] hover:bg-[#f7f5f0]">
             {{ item.actionLabel }}
-          </button>
+          </NuxtLink>
         </article>
       </div>
       <div v-else class="mt-4 flex min-h-16 items-center justify-center rounded-md border border-dashed border-[#e8e4de] bg-[#fdfcf9] px-4 text-center">
-        <p class="text-xs text-[#858893]">Belum ada tindakan yang perlu diproses</p>
+        <p class="text-xs text-[#858893]">{{ loadError || 'Belum ada tindakan yang perlu diproses' }}</p>
       </div>
     </section>
 
@@ -141,7 +210,7 @@ onMounted(async () => {
           <h2 class="text-xs text-[#777b87]">{{ card.label }}</h2>
           <p class="mt-3 text-2xl font-bold leading-none text-[#20233e]">{{ summaryValues[card.key as keyof typeof summaryValues] }}</p>
           <p class="mt-2 text-[11px] text-[#8a8d98]">
-            {{ card.key === 'advance' || card.key === 'returned' ? 'Belum tersedia dari backend' : 'Dari perjalanan kamu' }}
+            {{ card.key === 'advance' || card.key === 'returned' ? 'Dari uang muka kamu' : 'Dari perjalanan kamu' }}
           </p>
         </div>
         <span class="flex h-8 w-8 items-center justify-center rounded-md" :class="card.tone" aria-hidden="true">
@@ -157,7 +226,7 @@ onMounted(async () => {
       <article class="min-h-[230px] rounded-lg border border-[#e8e7e3] bg-white p-4 shadow-[0_3px_12px_rgba(28,28,45,0.04)]">
         <div class="flex items-center justify-between">
           <h2 class="text-sm font-bold text-[#20233e]">Pengajuan Perjalanan Terbaru</h2>
-          <button type="button" class="text-[11px] font-semibold text-[#1d46bb] hover:underline">Lihat semua</button>
+          <NuxtLink to="/dinas" class="text-[11px] font-semibold text-[#1d46bb] hover:underline">Lihat semua</NuxtLink>
         </div>
         <div v-if="isLoading" class="mt-4 flex min-h-[165px] items-center justify-center border-y border-[#efeeeb]">
           <p class="text-xs text-[#858893]">Memuat pengajuan...</p>
@@ -183,23 +252,32 @@ onMounted(async () => {
       </article>
 
       <article class="flex min-h-[230px] flex-col rounded-lg border border-[#e8e7e3] bg-white p-4 shadow-[0_3px_12px_rgba(28,28,45,0.04)]">
-        <h2 class="text-sm font-bold text-[#20233e]">Kuota Dinas 2026</h2>
+        <h2 class="text-sm font-bold text-[#20233e]">Kuota Dinas {{ dashboardSummary?.travel_quota.year ?? new Date().getFullYear() }}</h2>
         <div class="flex flex-1 items-center justify-center py-3">
-          <div class="flex h-[92px] w-[92px] items-center justify-center rounded-full border-[8px] border-[#e7e8eb]">
+          <div
+            class="flex h-[92px] w-[92px] items-center justify-center rounded-full p-2"
+            :style="{ background: `conic-gradient(#f6a623 ${quotaProgress}%, #e7e8eb ${quotaProgress}% 100%)` }"
+          >
+            <div class="flex h-full w-full items-center justify-center rounded-full bg-white">
             <div class="text-center">
-              <p class="text-sm font-bold leading-none text-[#20233e]">— / —</p>
+              <p class="text-sm font-bold leading-none text-[#20233e]">
+                {{ dashboardSummary?.travel_quota.used ?? '—' }} / {{ dashboardSummary?.travel_quota.limit ?? '—' }}
+              </p>
               <p class="mt-1 text-[9px] text-[#8a8d98]">Terpakai</p>
+            </div>
             </div>
           </div>
         </div>
-        <p class="text-center text-[11px] text-[#858893]">Informasi kuota akan tampil di sini</p>
+        <p class="text-center text-[11px] text-[#858893]">
+          {{ dashboardSummary ? `${dashboardSummary.travel_quota.remaining} perjalanan tersisa` : loadError || 'Memuat informasi kuota...' }}
+        </p>
       </article>
     </section>
 
     <article class="overflow-hidden rounded-lg border border-[#e8e7e3] bg-white shadow-[0_3px_12px_rgba(28,28,45,0.04)]">
       <div class="flex items-center justify-between px-3 py-3">
         <h2 class="text-sm font-bold text-[#20233e]">Perjalanan Mendatang Detail</h2>
-        <button type="button" class="text-[11px] font-semibold text-[#1d46bb] hover:underline">Lihat semua</button>
+        <NuxtLink to="/dinas" class="text-[11px] font-semibold text-[#1d46bb] hover:underline">Lihat semua</NuxtLink>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full min-w-[620px] border-collapse text-left">
@@ -210,22 +288,25 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr v-if="isLoading">
-              <td colspan="6" class="h-20 px-4 text-center text-xs text-[#858893]">Memuat perjalanan...</td>
+              <td colspan="7" class="h-20 px-4 text-center text-xs text-[#858893]">Memuat perjalanan...</td>
             </tr>
             <tr v-else-if="upcomingRequests.length" v-for="request in upcomingRequests" :key="request.id" class="border-b border-[#efeeeb] last:border-0">
               <td class="px-4 py-3 text-xs font-medium text-[#20233e]">{{ request.destination }}</td>
               <td class="whitespace-nowrap px-4 py-3 text-[11px] text-[#727783]">{{ formatDateRange(request.start_date, request.end_date) }}</td>
               <td class="max-w-[240px] truncate px-4 py-3 text-[11px] text-[#727783]">{{ request.purpose }}</td>
-              <td class="px-4 py-3 text-[11px] text-[#92939b]">—</td>
+              <td class="px-4 py-3 text-[11px] text-[#727783]">{{ request.transportation_mode || '—' }}</td>
               <td class="px-4 py-3">
                 <span class="inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium" :class="statusStyles[request.status] || 'bg-slate-100 text-slate-700'">
                   {{ statusLabels[request.status] || request.status }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-[11px] text-[#92939b]">—</td>
+              <td class="px-4 py-3 text-[11px] text-[#727783]">{{ request.lpj_status || '—' }}</td>
+              <td class="px-4 py-3 text-[11px]">
+                <NuxtLink to="/dinas" class="font-semibold text-[#1d46bb] hover:underline">Detail</NuxtLink>
+              </td>
             </tr>
             <tr v-else>
-              <td colspan="6" class="h-20 px-4 text-center text-xs text-[#858893]">{{ loadError || 'Belum ada perjalanan mendatang' }}</td>
+              <td colspan="7" class="h-20 px-4 text-center text-xs text-[#858893]">{{ loadError || 'Belum ada perjalanan mendatang' }}</td>
             </tr>
           </tbody>
         </table>
