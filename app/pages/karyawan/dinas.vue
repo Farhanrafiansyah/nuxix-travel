@@ -6,6 +6,8 @@ type TravelRequest = {
   start_date: string
   end_date: string
   purpose: string
+  transportation_mode: string | null
+  lpj_status: string
   document_url: string | null
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED' | 'COMPLETED'
   created_at: string
@@ -150,7 +152,7 @@ onMounted(async () => {
         <p class="mt-0.5 text-xs font-normal text-[#777b87]">Semua riwayat pengajuan perjalanan dinas kamu</p>
       </div>
 
-      <NuxtLink to="/dinas-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
+      <NuxtLink to="/karyawan/dinas-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
     Ajukan Perjalanan Dinas
   </NuxtLink>
     </div>
@@ -297,9 +299,9 @@ onMounted(async () => {
                 {{ item.purpose }}
               </td>
 
-              <!-- Transportasi (Belum di backend) -->
-              <td class="whitespace-nowrap px-4 py-3.5 text-[#9ca3af]">
-                —
+              <!-- Transportasi -->
+              <td class="whitespace-nowrap px-4 py-3.5 text-[#4b5563]">
+                {{ item.transportation_mode || '—' }}
               </td>
 
               <!-- Status Approval: 4 progress bars + Badge -->
@@ -324,19 +326,18 @@ onMounted(async () => {
                 </div>
               </td>
 
-              <!-- Status LPJ (Belum di backend) -->
-              <td class="whitespace-nowrap px-4 py-3.5 text-xs text-[#9ca3af]">
-                —
+              <!-- Status LPJ -->
+              <td class="whitespace-nowrap px-4 py-3.5 text-xs text-[#4b5563]">
+                {{ item.lpj_status || '—' }}
               </td>
 
               <!-- Aksi -->
               <td class="whitespace-nowrap px-4 py-3.5 text-right font-medium">
-                <button
-                  type="button"
-                  class="text-xs font-semibold text-[#1d46bb] hover:underline"
-                >
-                  Detail
-                </button>
+              
+
+                <NuxtLink :to="{ path: '/karyawan/dinas-detail', query: { id: item.id } }" class="text-xs font-semibold text-[#1d46bb] hover:underline">
+                Detail
+              </NuxtLink>
               </td>
             </tr>
 

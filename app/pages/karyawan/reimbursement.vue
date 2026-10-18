@@ -125,9 +125,9 @@ onMounted(async () => {
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Reimbursement Saya</h1>
-        <p class="text-xs font-medium text-[#777b87]">Daftar dan status pengajuan reimbursement Anda.</p>
+        <p class="text-xs font-medium text-[#777b87]">Kelola pengajuan penggantian biaya perjalanan dinas.</p>
       </div>
-        <NuxtLink to="/reimbursement-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
+        <NuxtLink to="/karyawan/reimbursement-ajukan" class="inline-flex h-10 items-center gap-2 rounded-md bg-[#f6a623] px-4 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e99514]">
     Ajukan Reimbursement
   </NuxtLink>
     </div>
@@ -205,9 +205,9 @@ onMounted(async () => {
               </td>
               <td class="whitespace-nowrap px-3 py-2.5 text-[#77736a]">{{ formatDate(reimbursement.created_at) }}</td>
               <td class="px-3 py-2 text-center">
-                <button type="button" class="rounded border border-[#e8e1d6] bg-white px-2 py-1 text-[8px] font-medium text-[#171717] hover:bg-[#faf9f6]">
+                <NuxtLink :to="`/karyawan/reimbursement-detail?id=${reimbursement.id}`" class="inline-flex rounded border border-[#e8e1d6] bg-white px-2 py-1 text-[8px] font-medium text-[#171717] hover:bg-[#faf9f6]">
                   Detail
-                </button>
+                </NuxtLink>
               </td>
             </tr>
             <tr v-if="!isLoading && !loadError && visibleReimbursements.length === 0">

@@ -2,17 +2,35 @@
 const route = useRoute()
 const currentUser = useCurrentUser()
 
-const menuItems = [
+type MenuItem = {
+  label: string
+  icon: 'grid' | 'briefcase' | 'wallet' | 'receipt' | 'bell' | 'user'
+  to: string
+  activePaths?: string[]
+}
+
+const sharedMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
-  { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/dinas', activePaths: ['/dinas-ajukan'] },
-  { label: 'Uang Muka', icon: 'wallet', to: '/uang-muka' },
-  { label: 'Reimbursement', icon: 'receipt', to: '/reimbursement', badge: '1', activePaths: ['/reimbursement-ajukan'] },
   { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' },
-  { label: 'Profil', icon: 'user', to: '/profil' }
+  { label: 'Profil', icon: 'user', to: '/karyawan/profil' }
 ]
 
-const isMenuItemActive = (item: (typeof menuItems)[number]) =>
-  route.path === item.to || ('activePaths' in item && item.activePaths.includes(route.path))
+const roleMenuItems: Partial<Record<string, MenuItem[]>> = {
+  Karyawan: [
+    { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/karyawan/dinas', activePaths: ['/karyawan/dinas-ajukan', '/karyawan/dinas-detail'] },
+    { label: 'Uang Muka', icon: 'wallet', to: '/karyawan/uang-muka' },
+    { label: 'Reimbursement', icon: 'receipt', to: '/karyawan/reimbursement', activePaths: ['/karyawan/reimbursement-ajukan', '/karyawan/reimbursement-detail'] }
+  ]
+}
+
+const menuItems = computed(() => [
+  ...sharedMenuItems.slice(0, 1),
+  ...(currentUser.value ? roleMenuItems[currentUser.value.role] || [] : []),
+  ...sharedMenuItems.slice(1)
+])
+
+const isMenuItemActive = (item: MenuItem) =>
+  route.path === item.to || ('activePaths' in item && Boolean(item.activePaths?.includes(route.path)))
 
 const icons = {
   grid: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
@@ -26,7 +44,6 @@ const icons = {
 }
 
 const actions = [
-  { label: 'Ciutkan Menu', icon: 'collapse' },
   { label: 'Keluar', icon: 'logout', danger: true, to: '/login' }
 ]
 
@@ -45,7 +62,7 @@ const handleAction = async (action: (typeof actions)[number]) => {
 </script>
 
 <template>
-  <aside class="fixed inset-y-0 left-0 z-40 flex h-screen w-[190px] flex-col overflow-y-auto bg-[#171d4d] px-2.5 py-4 text-white">
+  <aside class="fixed inset-y-0 left-0 z-40 flex h-screen w-[190px] flex-col overflow-y-auto bg-[#164A41] px-2.5 py-4 text-white">
       <div class="mb-7 flex items-center gap-2.5 px-1.5">
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#f6a623] text-white">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">

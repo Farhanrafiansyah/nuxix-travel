@@ -175,7 +175,7 @@ const submitRequest = async () => {
     })
     localStorage.removeItem(draftStorageKey)
     successMessage.value = response.message || 'Pengajuan perjalanan dinas berhasil dikirim.'
-    await navigateTo('/dinas')
+    await navigateTo('/karyawan/dinas')
   } catch (error) {
     const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
     const statusCode = fetchError.statusCode ?? fetchError.status
@@ -402,7 +402,7 @@ onMounted(async () => {
         <button
           type="button"
           class="h-8 rounded-md border border-[#e5e0d7] bg-white px-3 text-[11px] font-medium text-[#272621] transition-colors hover:bg-[#f5f1e8]"
-          @click="navigateTo('/dinas')"
+          @click="navigateTo('/karyawan/dinas')"
         >
           Batal
         </button>

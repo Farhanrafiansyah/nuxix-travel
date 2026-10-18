@@ -4,16 +4,28 @@
 
   const pageLabels: Record<string, string> = {
     '/dashboard': 'Dashboard',
-    '/dinas': 'Perjalanan Dinas',
-    '/dinas-ajukan': 'Ajukan Perjalanan Dinas',
-    '/uang-muka': 'Uang Muka',
-    '/reimbursement': 'Reimbursement',
-    '/reimbursement-ajukan': 'Ajukan Reimbursement',
+    '/karyawan/dinas': 'Perjalanan Dinas',
+    '/karyawan/dinas-ajukan': 'Ajukan Perjalanan Dinas',
+    '/karyawan/uang-muka': 'Uang Muka',
+    '/karyawan/reimbursement': 'Reimbursement',
+    '/karyawan/reimbursement-ajukan': 'Ajukan Reimbursement',
+    '/karyawan/reimbursement-detail': 'Detail Reimbursement',
+    '/karyawan/profil': 'Profil',
     '/notifikasi': 'Notifikasi',
-    '/profil': 'Profil'
   }
 
-  const currentPageLabel = computed(() => pageLabels[route.path] ?? 'Halaman')
+  const currentPageLabel = computed(() => {
+    if (route.path === '/karyawan/dinas-detail') {
+      const id = Number(route.query.id)
+
+      return Number.isInteger(id) && id > 0
+        ? `TRV-${String(id).padStart(4, '0')}`
+        : 'Detail Perjalanan'
+    }
+
+    return pageLabels[route.path] ?? 'Halaman'
+  })
+
   const userInitials = computed(() => currentUser.value?.name
     .split(/\s+/)
     .filter(Boolean)
