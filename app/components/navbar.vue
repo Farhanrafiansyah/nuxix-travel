@@ -10,8 +10,13 @@
     '/karyawan/reimbursement': 'Reimbursement',
     '/karyawan/reimbursement-ajukan': 'Ajukan Reimbursement',
     '/karyawan/reimbursement-detail': 'Detail Reimbursement',
-    '/karyawan/profil': 'Profil',
+    '/karyawan/profil': 'Profil Saya',
     '/notifikasi': 'Notifikasi',
+    '/tim-keuangan/uang-muka': 'Uang Muka',
+    '/tim-keuangan/reimbursement-verifikasi': 'Verifikasi Reimbursement',
+    '/tim-keuangan/uang-muka': 'Uang Muka',
+    '/tim-keuangan/pembayaran': 'Pembayaran',
+    '/tim-keuangan/laporan-keuangan': 'Laporan Keuangan',
   }
 
   const currentPageLabel = computed(() => {
