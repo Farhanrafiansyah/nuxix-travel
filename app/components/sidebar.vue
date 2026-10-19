@@ -11,15 +11,15 @@ type MenuItem = {
 
 const sharedMenuItems: MenuItem[] = [
   { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
-  { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' },
-  { label: 'Profil', icon: 'user', to: '/karyawan/profil' }
+  { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' }
 ]
 
 const roleMenuItems: Partial<Record<string, MenuItem[]>> = {
   Karyawan: [
     { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/karyawan/dinas', activePaths: ['/karyawan/dinas-ajukan', '/karyawan/dinas-detail'] },
     { label: 'Uang Muka', icon: 'wallet', to: '/karyawan/uang-muka' },
-    { label: 'Reimbursement', icon: 'receipt', to: '/karyawan/reimbursement', activePaths: ['/karyawan/reimbursement-ajukan', '/karyawan/reimbursement-detail'] }
+    { label: 'Reimbursement', icon: 'receipt', to: '/karyawan/reimbursement', activePaths: ['/karyawan/reimbursement-ajukan', '/karyawan/reimbursement-detail'] },
+    { label: 'Profil', icon: 'user', to: '/karyawan/profil' }
   ]
 }
 
