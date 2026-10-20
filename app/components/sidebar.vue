@@ -4,36 +4,45 @@ const currentUser = useCurrentUser()
 
 type MenuItem = {
   label: string
-  icon: 'grid' | 'briefcase' | 'wallet' | 'receipt' | 'bell' | 'user' | 'chart-bar' | 'banknotes'
+  icon: 'grid' | 'briefcase' | 'wallet' | 'receipt' | 'bell' | 'user' | 'chart-bar' | 'banknotes' | 'check' | 'time'
   to: string
   activePaths?: string[]
 }
 
-const sharedMenuItems: MenuItem[] = [
-  { label: 'Dashboard', icon: 'grid', to: '/dashboard' },
-  { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' }
-]
 
 const roleMenuItems: Partial<Record<string, MenuItem[]>> = {
   Karyawan: [
+    { label: 'Dashboard', icon: 'grid', to: '/karyawan/dashboard-karyawan' },
     { label: 'Perjalanan Dinas', icon: 'briefcase', to: '/karyawan/dinas', activePaths: ['/karyawan/dinas-ajukan', '/karyawan/dinas-detail'] },
     { label: 'Uang Muka', icon: 'wallet', to: '/karyawan/uang-muka' },
     { label: 'Reimbursement', icon: 'receipt', to: '/karyawan/reimbursement', activePaths: ['/karyawan/reimbursement-ajukan', '/karyawan/reimbursement-detail'] },
     { label: 'Profil', icon: 'user', to: '/karyawan/profil' }
   ],
   'Tim Keuangan': [
-    { label: 'Verifikasi Reimbursement', icon: 'receipt', to: '/tim-keuangan/reimbursement-verifikasi' },
+    { label: 'Dashboard', icon: 'grid', to: '/tim-keuangan/dashboard-keuangan' },
+    { label: 'Verifikasi', icon: 'receipt', to: '/tim-keuangan/reimbursement-verifikasi' },
     { label: 'Uang Muka', icon: 'wallet', to: '/tim-keuangan/uang-muka' },
     { label: 'Pembayaran', icon: 'chart-bar', to: '/tim-keuangan/pembayaran' },
     { label: 'Laporan Keuangan', icon: 'banknotes', to: '/tim-keuangan/laporan-keuangan'},
+  ],
+  'Atasan': [
+    { label: 'Dashboard', icon: 'grid', to: '/atasan-approver/dashboard-atasan' },
+    { label: 'Persetujuan', icon: 'check', to: '/atasan-approver/persetujuan' },
+    { label: 'Riwayat Persetujuan', icon: 'time', to: '/atasan-approver/persetujuan-riwayat' },
   ]
 }
 
-const menuItems = computed(() => [
-  ...sharedMenuItems.slice(0, 1),
-  ...(currentUser.value ? roleMenuItems[currentUser.value.role] || [] : []),
-  ...sharedMenuItems.slice(1)
-])
+
+  const sharedMenuItems: MenuItem[] = [
+  { label: 'Notifikasi', icon: 'bell', to: '/notifikasi' }
+]
+
+  const menuItems = computed(() => [
+    ...(currentUser.value
+      ? roleMenuItems[currentUser.value.role] || []
+      : []),
+    ...sharedMenuItems
+  ])
 
 const isMenuItemActive = (item: MenuItem) =>
   route.path === item.to || ('activePaths' in item && Boolean(item.activePaths?.includes(route.path)))
@@ -48,7 +57,9 @@ const icons = {
   bell: '<path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/>',
   user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
   collapse: '<path d="M8 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3M14 8l4 4-4 4M9 12h9"/>',
-  logout: '<path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M10 12h9"/>'
+  logout: '<path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M10 12h9"/>',
+  check: '<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />',
+  time: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />',
 }
 
 const actions = [

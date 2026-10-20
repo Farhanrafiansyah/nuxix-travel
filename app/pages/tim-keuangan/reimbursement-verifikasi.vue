@@ -9,6 +9,18 @@ interface ReimbursementItem {
   description?: string | null
 }
 
+interface ReimbursementRecord {
+  id: number
+  user_id: number
+  travel_request_id: number
+  total_amount: number | string
+  status: ReimbursementStatus
+  created_at: string
+  user: { name: string; department: string } | null
+  travelRequest: { destination: string } | null
+  items: ReimbursementItem[]
+}
+
 interface ReimbursementRow {
   id: number
   displayId: string
@@ -92,7 +104,7 @@ const getInitials = (name: string) => {
 }
 
 // Fetch Real Backend Data
-const fetchPendingReimbursements = async () => {
+const fetchReimbursements = async () => {
   if (!authToken.value) {
     await navigateTo('/login')
     return
@@ -103,65 +115,47 @@ const fetchPendingReimbursements = async () => {
 
   try {
     const headers = { Authorization: `Bearer ${authToken.value}` }
-    const res = await $fetch<{ pending: any[] }>('http://localhost:8000/api/reimbursements/pending', { headers })
+    const res = await $fetch<{ reimbursements: ReimbursementRecord[] }>('http://localhost:8000/api/reimbursements', { headers })
 
-    if (res?.pending && Array.isArray(res.pending)) {
-      const rows: ReimbursementRow[] = []
+    reimbursementList.value = res.reimbursements.map((item) => {
+      const employeeName = item.user?.name || `Karyawan #${item.user_id}`
+      const items = item.items ?? []
+      const hasMissingReceipt = items.length === 0 || items.some((entry) => !entry.receipt_url)
 
-      for (const item of res.pending) {
-        let destination = 'Perjalanan Dinas'
-        let employeeName = item.user?.name || `Karyawan #${item.user_id}`
-        let department = item.user?.department || 'Umum'
-        let items: ReimbursementItem[] = item.items || []
-
-        // Ambil info perjalanan via GET /api/travels/:id jika belum ada relasi dari backend
-        if (item.travel_request_id && !item.travelRequest) {
-          try {
-            const travel = await $fetch<any>(`http://localhost:8000/api/travels/${item.travel_request_id}`, { headers })
-            if (travel?.destination) {
-              destination = travel.destination
-            }
-          } catch (e) {
-            console.warn(`Gagal fetch travel ID ${item.travel_request_id}:`, e)
-          }
-        } else if (item.travelRequest?.destination) {
-          destination = item.travelRequest.destination
-        }
-
-        // Tentukan kelengkapan bukti berdasarkan keberadaan receipt_url pada item
-        const hasMissingReceipt = items.length > 0 && items.some((i) => !i.receipt_url)
-        const proofStatus: 'Lengkap' | 'Kurang' = hasMissingReceipt ? 'Kurang' : 'Lengkap'
-
-        rows.push({
-          id: item.id,
-          displayId: `RB-${String(item.id).padStart(4, '0')}`,
-          userId: item.user_id,
-          employeeName,
-          initials: getInitials(employeeName),
-          department,
-          destination,
-          totalAmount: Number(item.total_amount) || 0,
-          proofStatus,
-          status: item.status,
-          date: item.created_at ? new Date(item.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          items
-        })
+      return {
+        id: item.id,
+        displayId: `RB-${String(item.id).padStart(4, '0')}`,
+        userId: item.user_id,
+        employeeName,
+        initials: getInitials(employeeName),
+        department: item.user?.department || 'Umum',
+        destination: item.travelRequest?.destination || `Perjalanan #${item.travel_request_id}`,
+        totalAmount: Number(item.total_amount) || 0,
+        proofStatus: hasMissingReceipt ? 'Kurang' : 'Lengkap',
+        status: item.status,
+        date: new Date(item.created_at).toISOString().split('T')[0],
+        items
       }
-
-      reimbursementList.value = rows
-    } else {
-      reimbursementList.value = []
-    }
-  } catch (error: any) {
+    })
+  } catch (error) {
     console.error('Error fetching reimbursements:', error)
-    loadError.value = error?.data?.message || 'Gagal memuat data dari API. Pastikan Anda login dengan akun Tim Keuangan.'
+    const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
+    const statusCode = fetchError.statusCode ?? fetchError.status
+
+    if (statusCode === 401) {
+      authToken.value = null
+      await navigateTo('/login')
+      return
+    }
+
+    loadError.value = fetchError.data?.message || 'Gagal memuat data dari API. Pastikan Anda login dengan akun Tim Keuangan.'
   } finally {
     isLoading.value = false
   }
 }
 
 onMounted(() => {
-  fetchPendingReimbursements()
+  fetchReimbursements()
 })
 
 // Filter Logic
@@ -185,7 +179,21 @@ const filteredData = computed(() => {
       selectedDepartment.value === 'Semua Departemen' ||
       item.department === selectedDepartment.value
 
-    // 4. Filter Nominal
+    // 4. Filter tanggal berdasarkan bulan pengajuan
+    let matchesDate = true
+    if (selectedDateFilter.value !== 'Semua Tanggal') {
+      const [year, month] = item.date.split('-').map(Number)
+      const today = new Date()
+      const previousMonth = today.getMonth() === 0 ? 12 : today.getMonth()
+      const targetMonth = selectedDateFilter.value === 'Bulan Ini' ? today.getMonth() + 1 : previousMonth
+      const targetYear = selectedDateFilter.value === 'Bulan Ini'
+        ? today.getFullYear()
+        : today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear()
+
+      matchesDate = year === targetYear && month === targetMonth
+    }
+
+    // 5. Filter Nominal
     let matchesNominal = true
     if (selectedNominalFilter.value === '< 1 Juta') {
       matchesNominal = item.totalAmount < 1000000
@@ -195,7 +203,7 @@ const filteredData = computed(() => {
       matchesNominal = item.totalAmount > 5000000
     }
 
-    return matchesSearch && matchesStatus && matchesDepartment && matchesNominal
+    return matchesSearch && matchesStatus && matchesDepartment && matchesDate && matchesNominal
   })
 })
 
@@ -206,7 +214,7 @@ const paginatedData = computed(() => {
   return filteredData.value.slice(start, start + pageSize)
 })
 
-watch([searchQuery, selectedStatus, selectedDepartment, selectedNominalFilter], () => {
+watch([searchQuery, selectedStatus, selectedDepartment, selectedDateFilter, selectedNominalFilter], () => {
   currentPage.value = 1
 })
 
@@ -243,7 +251,7 @@ const handleProcess = async (newStatus: ReimbursementStatus) => {
     // Refresh data asli dari database setelah proses
     setTimeout(async () => {
       isModalOpen.value = false
-      await fetchPendingReimbursements()
+      await fetchReimbursements()
     }, 800)
   } catch (error: any) {
     console.error('Error proses verifikasi:', error)
@@ -261,7 +269,7 @@ const handleProcess = async (newStatus: ReimbursementStatus) => {
   <div class="space-y-6">
     <!-- Judul & Keterangan Halaman -->
     <div>
-      <h1 class="text-3xl font-bold tracking-tight text-[#16382b] sm:text-[32px]">
+      <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">
         Verifikasi Reimbursement
       </h1>
       <p class="mt-1 text-xs text-[#5d7768] sm:text-sm">
@@ -469,7 +477,7 @@ const handleProcess = async (newStatus: ReimbursementStatus) => {
                     <line x1="2" y1="10" x2="22" y2="10"/>
                   </svg>
                 </div>
-                Belum ada pengajuan reimbursement baru yang menunggu verifikasi dari database.
+                Tidak ada pengajuan reimbursement yang sesuai dengan filter.
               </td>
             </tr>
           </tbody>

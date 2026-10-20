@@ -1,5 +1,11 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (!to.path.startsWith('/karyawan/')) return
+  const roleAccess = [
+    { prefix: '/karyawan/', roles: ['Karyawan'] },
+    { prefix: '/atasan-approver/', roles: ['Atasan', 'Super Admin'] },
+    { prefix: '/tim-keuangan/', roles: ['Tim Keuangan', 'Super Admin'] }
+  ]
+  const requiredAccess = roleAccess.find(({ prefix }) => to.path.startsWith(prefix))
+  if (!requiredAccess) return
 
   const authToken = useCookie<string | null>('auth_token')
   const currentUser = useCurrentUser()
@@ -31,7 +37,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
 
-  if (currentUser.value.role !== 'Karyawan') {
+  if (!requiredAccess.roles.includes(currentUser.value.role)) {
     return navigateTo('/dashboard')
   }
 })

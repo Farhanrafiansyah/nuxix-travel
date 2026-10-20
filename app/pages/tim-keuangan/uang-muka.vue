@@ -151,7 +151,7 @@ onMounted(loadAdvances)
   <section class="space-y-5 pb-8">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Pengajuan Uang Muka</h1>
+        <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Pengajuan Uang Muka</h1>
         <p class="mt-1 text-xs text-[#718078]">Pantau pengajuan uang muka perjalanan dari seluruh pengguna.</p>
       </div>
       <button

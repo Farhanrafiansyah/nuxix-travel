@@ -17,6 +17,9 @@
     '/tim-keuangan/uang-muka': 'Uang Muka',
     '/tim-keuangan/pembayaran': 'Pembayaran',
     '/tim-keuangan/laporan-keuangan': 'Laporan Keuangan',
+    '/atasan-approver/persetujuan': 'Persetujuan',
+    '/atasan-approver/persetujuan-riwayat': 'Riwayat Persetujuan',
+    '/atasan-approver/dashboard': 'Dashboard Persetujuan',
   }
 
   const currentPageLabel = computed(() => {
