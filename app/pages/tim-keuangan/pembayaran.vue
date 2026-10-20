@@ -1,40 +1,64 @@
 <script setup lang="ts">
-type PaymentType = 'Reimbursement' | 'Uang Muka'
+type PaymentType = 'REIMBURSEMENT' | 'CASH_ADVANCE'
 
-type PaymentQueueItem = {
+interface PaymentMethod {
+  code: string
+  label: string
+  description: string
+}
+
+interface PaymentQueueItem {
   id: number
-  employee_name: string
-  type: PaymentType
-  amount: number
-  created_at: string
+  transaction_id: string
+  transaction_type: PaymentType
+  applicant_name: string
+  role: string
+  department: string
+  destination: string
+  amount: string | number
+  requested_at: string
+  status: string
 }
 
-type PaymentHistoryItem = PaymentQueueItem & {
-  reference: string
-  paid_at: string
+interface PaymentHistoryItem {
+  id: number
+  transaction_id: string
+  transaction_type: PaymentType
+  applicant_name: string
+  role: string
+  department: string
+  destination: string
+  amount: string | number
+  payment_date: string | null
+  payment_reference: string | null
+  payment_method: string | null
+  status: 'PAID' | 'DISBURSED'
+  processor: { id: number; name: string; role: string } | null
 }
 
-type ActiveModal = 'add' | 'pay' | 'method' | null
+interface FinanceSettings {
+  annual_budget: string | number
+  payment_methods: PaymentMethod[]
+}
 
-const STORAGE_KEY = 'pembayaran-state-v1'
-const paymentTypes: PaymentType[] = ['Reimbursement', 'Uang Muka']
-
+const authToken = useCookie<string | null>('auth_token')
 const queue = ref<PaymentQueueItem[]>([])
 const history = ref<PaymentHistoryItem[]>([])
-const paymentMethod = ref('')
-const paymentMethodNote = ref('')
-const isHydrated = ref(false)
+const settings = ref<FinanceSettings | null>(null)
+const isLoading = ref(true)
+const loadError = ref('')
+const actionError = ref('')
+const actionSuccess = ref('')
 
-const activeModal = ref<ActiveModal>(null)
-const payingId = ref<number | null>(null)
-
-const addForm = reactive({
-  employee_name: '',
-  type: 'Reimbursement' as PaymentType,
-  amount: null as number | null
+const activeModal = ref<'pay' | 'settings' | null>(null)
+const selectedPayment = ref<PaymentQueueItem | null>(null)
+const isProcessing = ref(false)
+const isSavingSettings = ref(false)
+const payForm = reactive({ reference: '', method: '' })
+const settingsForm = reactive({
+  annual_budget: null as number | null,
+  payment_methods: [] as PaymentMethod[]
 })
-const payForm = reactive({ reference: '' })
-const methodForm = reactive({ method: '', note: '' })
 
 const formatCurrency = (amount: string | number) => new Intl.NumberFormat('id-ID', {
   style: 'currency',
@@ -42,187 +66,217 @@ const formatCurrency = (amount: string | number) => new Intl.NumberFormat('id-ID
   maximumFractionDigits: 0
 }).format(Number(amount))
 
-const formatCompactCurrency = (amount: number) => {
-  if (amount < 1_000_000) return formatCurrency(amount)
-
-  const millions = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(amount / 1_000_000)
-  return `Rp${millions}jt`
-}
-
-const formatDate = (date: string | undefined) => {
-  if (!date) return '—'
-  const parsedDate = new Date(date)
-  if (Number.isNaN(parsedDate.getTime())) return '—'
-
+const formatDate = (value: string | null) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
   return new Intl.DateTimeFormat('id-ID', {
     day: 'numeric',
     month: 'short',
     year: 'numeric'
-  }).format(parsedDate)
+  }).format(date)
 }
-
-const userInitials = (name: string) => name
-  .trim()
-  .split(/\s+/)
-  .filter(Boolean)
-  .slice(0, 2)
-  .map((part) => part[0])
-  .join('')
-  .toUpperCase() || 'KP'
-
-const totalQueueAmount = computed(() => queue.value.reduce(
-  (total, item) => total + Number(item.amount || 0),
-  0
-))
 
 const paidThisMonth = computed(() => {
   const now = new Date()
-
   return history.value.filter((item) => {
-    const paidAt = new Date(item.paid_at)
-    return paidAt.getMonth() === now.getMonth() && paidAt.getFullYear() === now.getFullYear()
+    if (!item.payment_date) return false
+    const paidDate = new Date(item.payment_date)
+    return paidDate.getMonth() === now.getMonth() && paidDate.getFullYear() === now.getFullYear()
   })
 })
 
 const paidThisMonthAmount = computed(() => paidThisMonth.value.reduce(
-  (total, item) => total + Number(item.amount || 0),
+  (sum, item) => sum + Number(item.amount || 0),
   0
 ))
-
-const averageProcessDays = computed(() => {
-  const rows = history.value.filter((item) => item.created_at && item.paid_at)
-  if (!rows.length) return null
-
-  const totalMs = rows.reduce(
-    (total, item) => total + (new Date(item.paid_at).getTime() - new Date(item.created_at).getTime()),
-    0
-  )
-
-  return totalMs / rows.length / 86_400_000
-})
 
 const statCards = computed(() => [
   {
     label: 'Antrean Pembayaran',
     value: String(queue.value.length),
-    note: `Total ${formatCurrency(totalQueueAmount.value)}`,
+    note: `Total ${formatCurrency(queue.value.reduce((sum, item) => sum + Number(item.amount || 0), 0))}`,
     accent: 'border-l-[#c8702a]'
   },
   {
     label: 'Dibayarkan Bulan Ini',
-    value: formatCompactCurrency(paidThisMonthAmount.value),
+    value: formatCurrency(paidThisMonthAmount.value),
     note: `${paidThisMonth.value.length} transaksi`,
     accent: 'border-l-[#3f6b4f]'
   },
   {
-    label: 'Rata-rata Waktu Proses',
-    value: averageProcessDays.value === null
-      ? '—'
-      : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(averageProcessDays.value)} hari`,
-    note: 'Sejak verifikasi',
+    label: 'Riwayat Pembayaran',
+    value: String(history.value.length),
+    note: 'Reimbursement dibayar dan uang muka dicairkan',
     accent: 'border-l-[#e0a93a]'
   }
 ])
 
-const closeModal = () => {
-  activeModal.value = null
-  payingId.value = null
+const loadPayments = async () => {
+  if (!authToken.value) {
+    await navigateTo('/login')
+    return
+  }
+
+  isLoading.value = true
+  loadError.value = ''
+
+  try {
+    const headers = { Authorization: `Bearer ${authToken.value}` }
+    const [queueResponse, historyResponse, settingsResponse] = await Promise.all([
+      $fetch<{ queue: PaymentQueueItem[] }>('http://localhost:8000/api/finance/payments/queue', { headers }),
+      $fetch<{ history: PaymentHistoryItem[] }>('http://localhost:8000/api/finance/payments/history', { headers }),
+      $fetch<{ settings: FinanceSettings }>('http://localhost:8000/api/finance/settings', { headers })
+    ])
+
+    queue.value = queueResponse.queue
+    history.value = historyResponse.history
+    settings.value = settingsResponse.settings
+  } catch (error) {
+    const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
+    const statusCode = fetchError.statusCode ?? fetchError.status
+    if (statusCode === 401) {
+      authToken.value = null
+      await navigateTo('/login')
+      return
+    }
+
+    console.error('Gagal memuat data pembayaran.', error)
+    loadError.value = statusCode === 403
+      ? 'Akses ditolak. Masuklah menggunakan akun Tim Keuangan atau Super Admin.'
+      : fetchError.data?.message || 'Data pembayaran belum dapat dimuat dari server.'
+  } finally {
+    isLoading.value = false
+  }
 }
 
-const openAddModal = () => {
-  addForm.employee_name = ''
-  addForm.type = 'Reimbursement'
-  addForm.amount = null
-  activeModal.value = 'add'
-}
-
-const openPayModal = (id: number) => {
-  payingId.value = id
+const openPayModal = (item: PaymentQueueItem) => {
+  selectedPayment.value = item
   payForm.reference = ''
+  payForm.method = settings.value?.payment_methods[0]?.code || ''
+  actionError.value = ''
+  actionSuccess.value = ''
   activeModal.value = 'pay'
 }
 
-const openMethodModal = () => {
-  methodForm.method = paymentMethod.value
-  methodForm.note = paymentMethodNote.value
-  activeModal.value = 'method'
+const closeModal = () => {
+  activeModal.value = null
+  selectedPayment.value = null
 }
 
-const submitAdd = () => {
-  queue.value.push({
-    id: Date.now(),
-    employee_name: addForm.employee_name.trim(),
-    type: addForm.type,
-    amount: Number(addForm.amount),
-    created_at: new Date().toISOString()
-  })
-  closeModal()
-}
+const submitPayment = async () => {
+  if (!selectedPayment.value || !authToken.value) return
+  isProcessing.value = true
+  actionError.value = ''
 
-const removeFromQueue = (id: number) => {
-  queue.value = queue.value.filter((item) => item.id !== id)
-}
+  const pathType = selectedPayment.value.transaction_type === 'REIMBURSEMENT'
+    ? 'reimbursement'
+    : 'cash-advance'
 
-const submitPay = () => {
-  const item = queue.value.find((queued) => queued.id === payingId.value)
-  if (!item) return closeModal()
-
-  history.value.unshift({
-    ...item,
-    reference: payForm.reference.trim(),
-    paid_at: new Date().toISOString()
-  })
-  removeFromQueue(item.id)
-  closeModal()
-}
-
-const submitMethod = () => {
-  paymentMethod.value = methodForm.method.trim()
-  paymentMethodNote.value = methodForm.note.trim()
-  closeModal()
-}
-
-// Data disimpan di browser. Ganti bagian ini dengan pemanggilan API
-// ($fetch + Authorization Bearer) ketika endpoint pembayaran sudah tersedia.
-onMounted(() => {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      queue.value = parsed.queue ?? []
-      history.value = parsed.history ?? []
-      paymentMethod.value = parsed.paymentMethod ?? ''
-      paymentMethodNote.value = parsed.paymentMethodNote ?? ''
+    await $fetch(
+      `http://localhost:8000/api/finance/payments/${pathType}/${selectedPayment.value.id}/process`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken.value}` },
+        body: {
+          payment_reference: payForm.reference.trim(),
+          payment_method: payForm.method
+        }
+      }
+    )
+    actionSuccess.value = `${selectedPayment.value.transaction_id} berhasil diproses.`
+    closeModal()
+    await loadPayments()
+  } catch (error) {
+    const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
+    const statusCode = fetchError.statusCode ?? fetchError.status
+    if (statusCode === 401) {
+      authToken.value = null
+      await navigateTo('/login')
+      return
     }
-  } catch (error) {
-    console.error('Gagal membaca data pembayaran dari penyimpanan lokal.', error)
+
+    console.error('Gagal memproses pembayaran.', error)
+    actionError.value = fetchError.data?.message || 'Pembayaran belum dapat diproses.'
+  } finally {
+    isProcessing.value = false
   }
+}
 
-  isHydrated.value = true
-})
+const openSettingsModal = () => {
+  if (!settings.value) return
+  settingsForm.annual_budget = Number(settings.value.annual_budget)
+  settingsForm.payment_methods = settings.value.payment_methods.map((method) => ({ ...method }))
+  actionError.value = ''
+  activeModal.value = 'settings'
+}
 
-watch([queue, history, paymentMethod, paymentMethodNote], () => {
-  if (!isHydrated.value) return
+const addPaymentMethod = () => {
+  settingsForm.payment_methods.push({ code: '', label: '', description: '' })
+}
+
+const saveSettings = async () => {
+  if (!authToken.value || settingsForm.annual_budget === null) return
+  isSavingSettings.value = true
+  actionError.value = ''
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      queue: queue.value,
-      history: history.value,
-      paymentMethod: paymentMethod.value,
-      paymentMethodNote: paymentMethodNote.value
-    }))
+    const response = await $fetch<{ settings: FinanceSettings }>('http://localhost:8000/api/finance/settings', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${authToken.value}` },
+      body: {
+        annual_budget: settingsForm.annual_budget,
+        payment_methods: settingsForm.payment_methods
+      }
+    })
+    settings.value = response.settings
+    actionSuccess.value = 'Pengaturan keuangan berhasil disimpan.'
+    closeModal()
   } catch (error) {
-    console.error('Gagal menyimpan data pembayaran ke penyimpanan lokal.', error)
+    const fetchError = error as { status?: number; statusCode?: number; data?: { message?: string } }
+    const statusCode = fetchError.statusCode ?? fetchError.status
+    if (statusCode === 401) {
+      authToken.value = null
+      await navigateTo('/login')
+      return
+    }
+
+    console.error('Gagal menyimpan pengaturan keuangan.', error)
+    actionError.value = fetchError.data?.message || 'Pengaturan belum dapat disimpan.'
+  } finally {
+    isSavingSettings.value = false
   }
-}, { deep: true })
+}
+
+onMounted(loadPayments)
 </script>
 
 <template>
   <section class="space-y-5 pb-8">
-    <div>
-      <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Pembayaran</h1>
-      <p class="mt-1 text-xs text-[#718078]">Antrean pembayaran dan riwayat transaksi perjalanan dinas.</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Pembayaran</h1>
+        <p class="mt-1 text-xs text-[#718078]">Proses transaksi siap bayar dan lihat riwayat yang tercatat di backend.</p>
+      </div>
+      <button
+        type="button"
+        class="h-9 rounded-md border border-[#dfe8dc] bg-white px-3 text-xs font-semibold text-[#31513f] hover:bg-[#f8faf6] disabled:opacity-60"
+        :disabled="isLoading"
+        @click="loadPayments"
+      >
+        {{ isLoading ? 'Memuat...' : 'Muat Ulang' }}
+      </button>
+    </div>
+
+    <div v-if="loadError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700" role="alert">
+      {{ loadError }}
+    </div>
+    <div v-if="actionError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700" role="alert">
+      {{ actionError }}
+    </div>
+    <div v-if="actionSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800" role="status">
+      {{ actionSuccess }}
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -231,90 +285,63 @@ watch([queue, history, paymentMethod, paymentMethodNote], () => {
         :key="card.label"
         class="rounded-xl border border-l-[3px] border-[#dfe8dc] bg-white px-4 py-3"
         :class="card.accent"
-        :aria-label="card.label"
       >
         <p class="text-[10px] font-medium text-[#718078]">{{ card.label }}</p>
-        <p class="mt-1 font-serif text-xl font-bold text-[#173b30]">{{ card.value }}</p>
+        <p class="mt-1 font-serif text-xl font-bold text-[#173b30]">{{ isLoading ? '…' : card.value }}</p>
         <p class="mt-1 text-[10px] text-[#7b8980]">{{ card.note }}</p>
       </section>
-
-      <section class="relative rounded-xl border border-l-[3px] border-[#dfe8dc] border-l-[#2f6b5e] bg-white px-4 py-3" aria-label="Metode pembayaran">
-        <button
-          type="button"
-          class="absolute right-3 top-2.5 rounded px-1.5 py-0.5 text-[10px] text-[#718078] transition-colors hover:bg-[#f1f5ee] hover:text-[#173b30]"
-          @click="openMethodModal"
-        >
+      <section class="relative rounded-xl border border-l-[3px] border-[#dfe8dc] border-l-[#2f6b5e] bg-white px-4 py-3">
+        <button type="button" class="absolute right-3 top-2.5 rounded px-1.5 py-0.5 text-[10px] text-[#718078] hover:bg-[#f1f5ee]" @click="openSettingsModal">
           Ubah
         </button>
         <p class="text-[10px] font-medium text-[#718078]">Metode Pembayaran</p>
-        <p class="mt-1 font-serif text-xl font-bold text-[#173b30]">{{ paymentMethod || '—' }}</p>
-        <p class="mt-1 text-[10px] text-[#7b8980]">{{ paymentMethodNote || '\u00A0' }}</p>
+        <p class="mt-1 font-serif text-base font-bold text-[#173b30]">
+          {{ settings?.payment_methods.map((method) => method.label).join(', ') || '—' }}
+        </p>
+        <p class="mt-1 text-[10px] text-[#7b8980]">Diatur melalui pengaturan keuangan</p>
       </section>
     </div>
 
     <section class="overflow-hidden rounded-xl border border-[#dfe8dc] bg-white" aria-labelledby="payment-queue-heading">
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8eee5] px-4 py-3">
+      <div class="border-b border-[#e8eee5] px-4 py-3">
         <h2 id="payment-queue-heading" class="font-serif text-sm font-bold text-[#173b30]">Antrean Pembayaran</h2>
-        <button
-          type="button"
-          class="inline-flex h-8 items-center rounded-md border border-[#dfe8dc] bg-white px-3 text-[10px] font-semibold text-[#31513f] transition-colors hover:bg-[#f8faf6]"
-          @click="openAddModal"
-        >
-          + Tambah Antrean
-        </button>
       </div>
-
       <div class="overflow-x-auto px-3.5">
-        <table class="w-full min-w-[640px] border-collapse text-left text-[10px]">
+        <table class="w-full min-w-[900px] border-collapse text-left text-[10px]">
           <thead class="border-b border-dashed border-[#dfe8dc] text-[9px] font-semibold text-[#728078]">
             <tr>
-              <th scope="col" class="px-2.5 py-2.5">Karyawan</th>
-              <th scope="col" class="px-2.5 py-2.5">Jenis</th>
-              <th scope="col" class="px-2.5 py-2.5">Nominal</th>
-              <th scope="col" class="px-2.5 py-2.5">Referensi</th>
-              <th scope="col" class="px-2.5 py-2.5">Status</th>
-              <th scope="col" class="px-2.5 py-2.5">Aksi</th>
+              <th class="px-2.5 py-2.5">ID Transaksi</th>
+              <th class="px-2.5 py-2.5">Pemohon</th>
+              <th class="px-2.5 py-2.5">Role / Departemen</th>
+              <th class="px-2.5 py-2.5">Jenis</th>
+              <th class="px-2.5 py-2.5">Tujuan</th>
+              <th class="px-2.5 py-2.5">Nominal</th>
+              <th class="px-2.5 py-2.5">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-[#e8eee5] text-[#263b31]">
-            <tr v-if="queue.length === 0">
-              <td colspan="6" class="px-4 py-12 text-center text-xs text-[#7b8980]">Belum ada antrean pembayaran.</td>
+            <tr v-if="isLoading">
+              <td colspan="7" class="px-4 py-12 text-center text-xs text-[#7b8980]">Memuat antrean pembayaran...</td>
             </tr>
-            <tr v-for="item in queue" v-else :key="item.id" class="transition-colors hover:bg-[#fbfcfa]">
-              <td class="whitespace-nowrap px-2.5 py-3">
-                <div class="flex items-center gap-2">
-                  <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#fae4ba] text-[9px] font-bold text-[#8a5408]">
-                    {{ userInitials(item.employee_name) }}
-                  </span>
-                  <span class="font-semibold">{{ item.employee_name }}</span>
-                </div>
-              </td>
-              <td class="whitespace-nowrap px-2.5 py-3">{{ item.type }}</td>
+            <tr v-else-if="queue.length === 0">
+              <td colspan="7" class="px-4 py-12 text-center text-xs text-[#7b8980]">Tidak ada transaksi yang siap dibayar.</td>
+            </tr>
+            <tr v-for="item in queue" v-else :key="item.transaction_id" class="hover:bg-[#fbfcfa]">
+              <td class="whitespace-nowrap px-2.5 py-3 font-medium">{{ item.transaction_id }}</td>
+              <td class="px-2.5 py-3 font-semibold">{{ item.applicant_name }}</td>
+              <td class="px-2.5 py-3">{{ item.role }} · {{ item.department }}</td>
+              <td class="px-2.5 py-3">{{ item.transaction_type === 'REIMBURSEMENT' ? 'Reimbursement' : 'Uang Muka' }}</td>
+              <td class="px-2.5 py-3">{{ item.destination }}</td>
               <td class="whitespace-nowrap px-2.5 py-3 font-medium">{{ formatCurrency(item.amount) }}</td>
-              <td class="px-2.5 py-3">—</td>
               <td class="px-2.5 py-3">
-                <span class="inline-flex whitespace-nowrap rounded-full bg-[#fff0df] px-2.5 py-1 text-[9px] font-semibold text-[#b75d11]">
-                  Menunggu Pembayaran
-                </span>
-              </td>
-              <td class="px-2.5 py-3">
-                <div class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    class="rounded-md bg-[#f0ad4e] px-3 py-1.5 text-[10px] font-semibold text-[#3b2a0d] transition-colors hover:bg-[#e9a443]"
-                    @click="openPayModal(item.id)"
-                  >
-                    Bayar
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded px-1.5 text-sm leading-none text-[#718078] transition-colors hover:bg-rose-50 hover:text-rose-700"
-                    aria-label="Hapus dari antrean"
-                    @click="removeFromQueue(item.id)"
-                  >
-                    ×
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  class="rounded-md bg-[#f0ad4e] px-3 py-1.5 text-[10px] font-semibold text-[#3b2a0d] hover:bg-[#e9a443] disabled:opacity-50"
+                  :disabled="!settings?.payment_methods.length"
+                  @click="openPayModal(item)"
+                >
+                  Bayar
+                </button>
               </td>
             </tr>
           </tbody>
@@ -326,158 +353,116 @@ watch([queue, history, paymentMethod, paymentMethodNote], () => {
       <div class="border-b border-[#e8eee5] px-4 py-3">
         <h2 id="payment-history-heading" class="font-serif text-sm font-bold text-[#173b30]">Riwayat Transaksi</h2>
       </div>
-
       <div class="overflow-x-auto px-3.5">
-        <table class="w-full min-w-[640px] border-collapse text-left text-[10px]">
+        <table class="w-full min-w-[1000px] border-collapse text-left text-[10px]">
           <thead class="border-b border-dashed border-[#dfe8dc] text-[9px] font-semibold text-[#728078]">
             <tr>
-              <th scope="col" class="px-2.5 py-2.5">Tanggal</th>
-              <th scope="col" class="px-2.5 py-2.5">Karyawan</th>
-              <th scope="col" class="px-2.5 py-2.5">Jenis</th>
-              <th scope="col" class="px-2.5 py-2.5">Nominal</th>
-              <th scope="col" class="px-2.5 py-2.5">Referensi</th>
-              <th scope="col" class="px-2.5 py-2.5">Status</th>
+              <th class="px-2.5 py-2.5">Tanggal</th>
+              <th class="px-2.5 py-2.5">ID Transaksi</th>
+              <th class="px-2.5 py-2.5">Pemohon</th>
+              <th class="px-2.5 py-2.5">Jenis</th>
+              <th class="px-2.5 py-2.5">Nominal</th>
+              <th class="px-2.5 py-2.5">Referensi</th>
+              <th class="px-2.5 py-2.5">Metode</th>
+              <th class="px-2.5 py-2.5">Diproses oleh</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-[#e8eee5] text-[#263b31]">
-            <tr v-if="history.length === 0">
-              <td colspan="6" class="px-4 py-12 text-center text-xs text-[#7b8980]">Belum ada riwayat transaksi.</td>
+            <tr v-if="isLoading">
+              <td colspan="8" class="px-4 py-12 text-center text-xs text-[#7b8980]">Memuat riwayat transaksi...</td>
             </tr>
-            <tr v-for="item in history" v-else :key="item.id" class="transition-colors hover:bg-[#fbfcfa]">
-              <td class="whitespace-nowrap px-2.5 py-3">{{ formatDate(item.paid_at) }}</td>
-              <td class="whitespace-nowrap px-2.5 py-3 font-semibold">{{ item.employee_name }}</td>
-              <td class="whitespace-nowrap px-2.5 py-3">{{ item.type }}</td>
+            <tr v-else-if="history.length === 0">
+              <td colspan="8" class="px-4 py-12 text-center text-xs text-[#7b8980]">Belum ada transaksi yang tercatat.</td>
+            </tr>
+            <tr v-for="item in history" v-else :key="item.transaction_id" class="hover:bg-[#fbfcfa]">
+              <td class="whitespace-nowrap px-2.5 py-3">{{ formatDate(item.payment_date) }}</td>
+              <td class="whitespace-nowrap px-2.5 py-3">{{ item.transaction_id }}</td>
+              <td class="whitespace-nowrap px-2.5 py-3 font-semibold">{{ item.applicant_name }}</td>
+              <td class="px-2.5 py-3">{{ item.transaction_type === 'REIMBURSEMENT' ? 'Reimbursement' : 'Uang Muka' }}</td>
               <td class="whitespace-nowrap px-2.5 py-3 font-medium">{{ formatCurrency(item.amount) }}</td>
-              <td class="whitespace-nowrap px-2.5 py-3">{{ item.reference }}</td>
-              <td class="px-2.5 py-3">
-                <span class="inline-flex whitespace-nowrap rounded-full bg-[#e4f0e1] px-2.5 py-1 text-[9px] font-semibold text-[#456d43]">
-                  Dibayar
-                </span>
-              </td>
+              <td class="px-2.5 py-3">{{ item.payment_reference || '—' }}</td>
+              <td class="px-2.5 py-3">{{ settings?.payment_methods.find((method) => method.code === item.payment_method)?.label || item.payment_method || '—' }}</td>
+              <td class="px-2.5 py-3">{{ item.processor?.name || '—' }}</td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <div
-      v-if="activeModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[#173b30]/40 px-4 py-6"
-      role="presentation"
-      @click.self="closeModal"
-    >
+    <div v-if="activeModal" class="fixed inset-0 z-50 flex items-center justify-center bg-[#173b30]/40 px-4 py-6" @click.self="closeModal">
       <form
-        v-if="activeModal === 'add'"
+        v-if="activeModal === 'pay' && selectedPayment"
         class="w-full max-w-sm rounded-xl border border-[#dfe8dc] bg-white p-5 shadow-xl"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="payment-add-heading"
-        @submit.prevent="submitAdd"
+        @submit.prevent="submitPayment"
       >
-        <h2 id="payment-add-heading" class="font-serif text-base font-bold text-[#173b30]">Tambah Antrean Pembayaran</h2>
-
-        <div class="mt-4 space-y-3">
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Nama karyawan</span>
-            <input
-              v-model="addForm.employee_name"
-              type="text"
-              required
-              autocomplete="off"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Jenis</span>
-            <select
-              v-model="addForm.type"
-              required
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-              <option v-for="type in paymentTypes" :key="type" :value="type">{{ type }}</option>
-            </select>
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Nominal (Rp)</span>
-            <input
-              v-model.number="addForm.amount"
-              type="number"
-              min="1"
-              step="1"
-              required
-              inputmode="numeric"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-        </div>
-
-        <div class="mt-5 flex justify-end gap-2">
-          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px] font-semibold text-[#31513f] hover:bg-[#f8faf6]" @click="closeModal">Batal</button>
-          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] hover:bg-[#e9a443]">Simpan</button>
-        </div>
-      </form>
-
-      <form
-        v-else-if="activeModal === 'pay'"
-        class="w-full max-w-sm rounded-xl border border-[#dfe8dc] bg-white p-5 shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="payment-pay-heading"
-        @submit.prevent="submitPay"
-      >
-        <h2 id="payment-pay-heading" class="font-serif text-base font-bold text-[#173b30]">Tandai Sudah Dibayar</h2>
-
+        <h2 class="font-serif text-base font-bold text-[#173b30]">Konfirmasi Pembayaran</h2>
+        <p class="mt-1 text-[10px] text-[#718078]">
+          {{ selectedPayment.transaction_id }} · {{ formatCurrency(selectedPayment.amount) }}
+        </p>
         <label class="mt-4 block">
           <span class="mb-1 block text-[10px] font-medium text-[#718078]">Nomor referensi transaksi</span>
-          <input
-            v-model="payForm.reference"
-            type="text"
-            required
-            autocomplete="off"
-            class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-          >
+          <input v-model="payForm.reference" type="text" required maxlength="100" class="h-9 w-full rounded-md border border-[#dfe8dc] px-3 text-[11px]">
         </label>
-
+        <label class="mt-3 block">
+          <span class="mb-1 block text-[10px] font-medium text-[#718078]">Metode pembayaran</span>
+          <select v-model="payForm.method" required class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px]">
+            <option v-for="method in settings?.payment_methods || []" :key="method.code" :value="method.code">
+              {{ method.label }}
+            </option>
+          </select>
+        </label>
+        <p v-if="actionError" class="mt-3 text-[10px] text-rose-700" role="alert">{{ actionError }}</p>
         <div class="mt-5 flex justify-end gap-2">
-          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px] font-semibold text-[#31513f] hover:bg-[#f8faf6]" @click="closeModal">Batal</button>
-          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] hover:bg-[#e9a443]">Bayar</button>
+          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px]" @click="closeModal">Batal</button>
+          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] disabled:opacity-50" :disabled="isProcessing">
+            {{ isProcessing ? 'Memproses...' : 'Konfirmasi Bayar' }}
+          </button>
         </div>
       </form>
 
       <form
-        v-else-if="activeModal === 'method'"
-        class="w-full max-w-sm rounded-xl border border-[#dfe8dc] bg-white p-5 shadow-xl"
+        v-else-if="activeModal === 'settings'"
+        class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[#dfe8dc] bg-white p-5 shadow-xl"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="payment-method-heading"
-        @submit.prevent="submitMethod"
+        @submit.prevent="saveSettings"
       >
-        <h2 id="payment-method-heading" class="font-serif text-base font-bold text-[#173b30]">Metode Pembayaran</h2>
-
-        <div class="mt-4 space-y-3">
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Metode</span>
-            <input
-              v-model="methodForm.method"
-              type="text"
-              autocomplete="off"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Keterangan</span>
-            <input
-              v-model="methodForm.note"
-              type="text"
-              autocomplete="off"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
+        <h2 class="font-serif text-base font-bold text-[#173b30]">Pengaturan Keuangan</h2>
+        <label class="mt-4 block">
+          <span class="mb-1 block text-[10px] font-medium text-[#718078]">Anggaran tahunan (Rp)</span>
+          <input v-model.number="settingsForm.annual_budget" type="number" min="0" step="1" required class="h-9 w-full rounded-md border border-[#dfe8dc] px-3 text-[11px]">
+        </label>
+        <div class="mt-4 flex items-center justify-between">
+          <h3 class="text-xs font-semibold text-[#31513f]">Metode pembayaran</h3>
+          <button type="button" class="text-[10px] font-semibold text-[#9a5a12]" @click="addPaymentMethod">+ Tambah</button>
         </div>
-
+        <div v-for="(method, index) in settingsForm.payment_methods" :key="index" class="mt-3 rounded-lg border border-[#e8eee5] p-3">
+          <div class="grid gap-2 sm:grid-cols-2">
+            <label class="text-[10px] text-[#718078]">
+              Kode
+              <input v-model="method.code" type="text" required maxlength="100" class="mt-1 h-8 w-full rounded border border-[#dfe8dc] px-2 text-[10px]">
+            </label>
+            <label class="text-[10px] text-[#718078]">
+              Nama metode
+              <input v-model="method.label" type="text" required maxlength="100" class="mt-1 h-8 w-full rounded border border-[#dfe8dc] px-2 text-[10px]">
+            </label>
+          </div>
+          <label class="mt-2 block text-[10px] text-[#718078]">
+            Keterangan
+            <input v-model="method.description" type="text" maxlength="500" class="mt-1 h-8 w-full rounded border border-[#dfe8dc] px-2 text-[10px]">
+          </label>
+          <button v-if="settingsForm.payment_methods.length > 1" type="button" class="mt-2 text-[10px] text-rose-700" @click="settingsForm.payment_methods.splice(index, 1)">
+            Hapus metode
+          </button>
+        </div>
+        <p v-if="actionError" class="mt-3 text-[10px] text-rose-700" role="alert">{{ actionError }}</p>
         <div class="mt-5 flex justify-end gap-2">
-          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px] font-semibold text-[#31513f] hover:bg-[#f8faf6]" @click="closeModal">Batal</button>
-          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] hover:bg-[#e9a443]">Simpan</button>
+          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px]" @click="closeModal">Batal</button>
+          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] disabled:opacity-50" :disabled="isSavingSettings">
+            {{ isSavingSettings ? 'Menyimpan...' : 'Simpan Pengaturan' }}
+          </button>
         </div>
       </form>
     </div>
