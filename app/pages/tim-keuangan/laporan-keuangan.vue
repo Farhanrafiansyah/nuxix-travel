@@ -74,14 +74,21 @@ const formatDate = (value: string | null) => {
 }
 
 const isInReportYear = (transaction: FinanceTransaction) => {
-  const dateValue = transaction.payment_date || transaction.requested_at
-  return dateValue ? new Date(dateValue).getFullYear() === reportYear : false
+  const requestedYear = new Date(transaction.requested_at).getFullYear()
+  const paymentYear = transaction.payment_date ? new Date(transaction.payment_date).getFullYear() : null
+  return requestedYear === reportYear || paymentYear === reportYear
 }
 
 const reportTransactions = computed(() => transactions.value.filter(isInReportYear))
 const actualTransactions = computed(() => reportTransactions.value.filter(
-  (transaction) => Number(transaction.actual_expense) > 0
+  (transaction) => transaction.payment_date
+    && new Date(transaction.payment_date).getFullYear() === reportYear
+    && Number(transaction.actual_expense) > 0
 ))
+const reportActualAmount = (transaction: FinanceTransaction) => transaction.payment_date
+  && new Date(transaction.payment_date).getFullYear() === reportYear
+  ? Number(transaction.actual_expense)
+  : 0
 
 const totalExpense = computed(() => actualTransactions.value.reduce(
   (total, transaction) => total + Number(transaction.actual_expense || 0),
@@ -254,7 +261,7 @@ const exportReport = () => {
     transaction.role,
     transaction.department,
     transaction.destination,
-    transaction.actual_expense,
+    reportActualAmount(transaction),
     statusLabel(transaction),
     transaction.payment_reference || ''
   ])
@@ -421,7 +428,7 @@ onMounted(loadReport)
               <td class="whitespace-nowrap px-2.5 py-3">{{ transaction.applicant_name }}</td>
               <td class="px-2.5 py-3">{{ transaction.department }}</td>
               <td class="px-2.5 py-3">{{ transaction.destination }}</td>
-              <td class="whitespace-nowrap px-2.5 py-3 font-medium">{{ formatCurrency(transaction.actual_expense) }}</td>
+              <td class="whitespace-nowrap px-2.5 py-3 font-medium">{{ formatCurrency(reportActualAmount(transaction)) }}</td>
               <td class="whitespace-nowrap px-2.5 py-3">{{ statusLabel(transaction) }}</td>
               <td class="px-2.5 py-3">{{ transaction.payment_reference || '—' }}</td>
             </tr>
