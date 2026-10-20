@@ -180,7 +180,7 @@ onMounted(async () => {
   <section class="dashboard-page space-y-3 pb-8">
     <!-- Page Header -->
     <div>
-      <h1 class="font-serif text-xl font-bold leading-tight text-[#173b30]">Ajukan Reimbursement</h1>
+      <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Ajukan Reimbursement</h1>
       <p class="mt-0.5 text-[10px] text-[#718078]">Lampirkan rincian pengeluaran perjalanan dinas Anda.</p>
     </div>
 

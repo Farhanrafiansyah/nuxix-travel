@@ -148,7 +148,7 @@ onMounted(async () => {
     <!-- Header: Title and Ajukan Baru button -->
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold leading-tight text-[#20233e]">Perjalanan Dinas Saya</h1>
+        <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Perjalanan Dinas Saya</h1>
         <p class="mt-0.5 text-xs font-normal text-[#777b87]">Semua riwayat pengajuan perjalanan dinas kamu</p>
       </div>
 

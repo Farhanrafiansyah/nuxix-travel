@@ -178,7 +178,7 @@ onMounted(loadAdvances)
   <section class="dashboard-page space-y-4 pb-8">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Pengajuan Uang Muka</h1>
+        <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Pengajuan Uang Muka</h1>
         <p class="mt-1 text-xs font-medium text-[#718078]">Ajukan dan pantau uang muka perjalanan dinas Anda.</p>
       </div>
       <button

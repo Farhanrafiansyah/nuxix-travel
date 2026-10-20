@@ -315,7 +315,7 @@ onMounted(async () => {
 <template>
   <section class="dashboard-page space-y-4 pb-8">
     <div>
-      <h1 class="font-serif text-2xl font-bold leading-tight text-[#1f2937]">Ajukan Perjalanan Dinas</h1>
+      <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Ajukan Perjalanan Dinas</h1>
       <p class="mt-0.5 text-xs text-[#6b7280]">Lengkapi formulir berikut untuk mengajukan perjalanan dinas baru.</p>
     </div>
 

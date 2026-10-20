@@ -94,7 +94,7 @@ onMounted(loadPendingTravels)
   <section class="space-y-5 pb-8">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Persetujuan Perjalanan</h1>
+        <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Persetujuan Perjalanan</h1>
         <p class="mt-1 text-xs text-[#718078]">Tinjau dan putuskan pengajuan perjalanan dinas.</p>
       </div>
       <button

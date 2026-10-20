@@ -4,6 +4,8 @@
 
   const pageLabels: Record<string, string> = {
     '/dashboard': 'Dashboard',
+    '/notifikasi': 'Notifikasi',
+    '/karyawan/dashboard-karyawan': 'Dashboard',
     '/karyawan/dinas': 'Perjalanan Dinas',
     '/karyawan/dinas-ajukan': 'Ajukan Perjalanan Dinas',
     '/karyawan/uang-muka': 'Uang Muka',
@@ -11,15 +13,15 @@
     '/karyawan/reimbursement-ajukan': 'Ajukan Reimbursement',
     '/karyawan/reimbursement-detail': 'Detail Reimbursement',
     '/karyawan/profil': 'Profil Saya',
-    '/notifikasi': 'Notifikasi',
+    '/tim-keuangan/dashboard-keuangan': 'Dashboard Keuangan',
     '/tim-keuangan/uang-muka': 'Uang Muka',
     '/tim-keuangan/reimbursement-verifikasi': 'Verifikasi Reimbursement',
     '/tim-keuangan/uang-muka': 'Uang Muka',
     '/tim-keuangan/pembayaran': 'Pembayaran',
     '/tim-keuangan/laporan-keuangan': 'Laporan Keuangan',
+    '/atasan-approver/dashboard-atasan': 'Dashboard Persetujuan',
     '/atasan-approver/persetujuan': 'Persetujuan',
     '/atasan-approver/persetujuan-riwayat': 'Riwayat Persetujuan',
-    '/atasan-approver/dashboard': 'Dashboard Persetujuan',
   }
 
   const currentPageLabel = computed(() => {

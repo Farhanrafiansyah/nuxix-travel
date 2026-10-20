@@ -213,7 +213,7 @@ onMounted(async () => {
   <section class="dashboard-page space-y-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="mt-1 text-2xl font-bold leading-tight text-[#173b30]">Dashboard Karyawan</h1>
+        <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Dashboard Karyawan</h1>
         <p class="mt-1 text-xs font-medium text-[#718078]">
           Selamat datang kembali, {{ currentUser?.name || 'Karyawan' }}. Berikut ringkasan aktivitas perjalanan dinas Anda.
         </p>

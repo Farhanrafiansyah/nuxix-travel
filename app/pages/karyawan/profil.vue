@@ -138,7 +138,7 @@ const saveEditInfo = () => {
   <div class="space-y-6">
     <!-- Header Page -->
     <div>
-      <h1 class="text-2xl font-bold leading-tight text-[#1e293b]">Profil Saya</h1>
+      <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Profil Saya</h1>
       <p class="mt-1 text-xs text-[#64748b]">Kelola informasi akun dan keamanan Anda.</p>
     </div>
 

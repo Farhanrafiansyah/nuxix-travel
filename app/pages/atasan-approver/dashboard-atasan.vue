@@ -75,7 +75,7 @@ onMounted(loadDashboard)
 <template>
   <section class="space-y-5 pb-8">
     <div>
-      <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Dashboard Persetujuan</h1>
+      <h1 class="mt-1 text-2xl font-bold leading-tight text-[#20233e]">Dashboard Persetujuan</h1>
       <p class="mt-1 text-xs text-[#718078]">Ringkasan perjalanan dan pengajuan yang menunggu persetujuan.</p>
     </div>
 
