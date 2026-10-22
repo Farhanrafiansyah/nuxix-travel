@@ -22,6 +22,11 @@
     '/atasan-approver/dashboard-atasan': 'Dashboard Persetujuan',
     '/atasan-approver/persetujuan': 'Persetujuan',
     '/atasan-approver/persetujuan-riwayat': 'Riwayat Persetujuan',
+    '/super-admin/dashboard-admin': 'Dashboard Admin',
+    '/super-admin/manajemen-pengguna': 'Manajemen Pengguna',
+    '/super-admin/departemen': 'Departemen',
+    '/super-admin/kebijakan': 'Kebijakan Perjalanan',
+    '/super-admin/role': 'Role & Permission',
   }
 
   const currentPageLabel = computed(() => {
