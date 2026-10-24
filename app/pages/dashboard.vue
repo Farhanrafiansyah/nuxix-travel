@@ -6,7 +6,9 @@ const loadError = ref('')
 const dashboardPaths: Record<string, string> = {
   Karyawan: '/karyawan/dashboard-karyawan',
   Atasan: '/atasan-approver/dashboard-atasan',
-  'Tim Keuangan': '/tim-keuangan/dashboard-keuangan'
+  'Tim Keuangan': '/tim-keuangan/dashboard-keuangan',
+  'Admin Travel': '/admin-travel/dashboard-travel',
+  'Super Admin': '/super-admin/dashboard-admin'
 }
 
 if (!authToken.value) {
