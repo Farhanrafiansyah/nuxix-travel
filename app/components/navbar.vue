@@ -1,35 +1,37 @@
 <script setup lang="ts">
-    const route = useRoute()
-  const currentUser = useCurrentUser()
+const route = useRoute()
+const currentUser = useCurrentUser()
 
-  const pageLabels: Record<string, string> = {
-    '/dashboard': 'Dashboard',
-    '/notifikasi': 'Notifikasi',
-    '/karyawan/dashboard-karyawan': 'Dashboard',
-    '/karyawan/dinas': 'Perjalanan Dinas',
-    '/karyawan/dinas-ajukan': 'Ajukan Perjalanan Dinas',
-    '/karyawan/uang-muka': 'Uang Muka',
-    '/karyawan/reimbursement': 'Reimbursement',
-    '/karyawan/reimbursement-ajukan': 'Ajukan Reimbursement',
-    '/karyawan/reimbursement-detail': 'Detail Reimbursement',
-    '/karyawan/profil': 'Profil Saya',
-    '/tim-keuangan/dashboard-keuangan': 'Dashboard Keuangan',
-    '/tim-keuangan/uang-muka': 'Uang Muka',
-    '/tim-keuangan/reimbursement-verifikasi': 'Verifikasi Reimbursement',
-    '/tim-keuangan/uang-muka': 'Uang Muka',
-    '/tim-keuangan/pembayaran': 'Pembayaran',
-    '/tim-keuangan/laporan-keuangan': 'Laporan Keuangan',
-    '/atasan-approver/dashboard-atasan': 'Dashboard Persetujuan',
-    '/atasan-approver/persetujuan': 'Persetujuan',
-    '/atasan-approver/persetujuan-riwayat': 'Riwayat Persetujuan',
-    '/super-admin/dashboard-admin': 'Dashboard Admin',
-    '/super-admin/manajemen-pengguna': 'Manajemen Pengguna',
-    '/super-admin/departemen': 'Departemen',
-    '/super-admin/kebijakan': 'Kebijakan Perjalanan',
-    '/super-admin/role': 'Role & Permission',
-  }
+const pageLabels: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/notifikasi': 'Notifikasi',
+  '/karyawan/dashboard-karyawan': 'Dashboard',
+  '/karyawan/dinas': 'Perjalanan Dinas',
+  '/karyawan/dinas-ajukan': 'Ajukan Perjalanan Dinas',
+  '/karyawan/uang-muka': 'Uang Muka',
+  '/karyawan/reimbursement': 'Reimbursement',
+  '/karyawan/reimbursement-ajukan': 'Ajukan Reimbursement',
+  '/karyawan/reimbursement-detail': 'Detail Reimbursement',
+  '/karyawan/profil': 'Profil Saya',
+  '/tim-keuangan/dashboard-keuangan': 'Dashboard Keuangan',
+  '/tim-keuangan/uang-muka': 'Uang Muka',
+  '/tim-keuangan/reimbursement-verifikasi': 'Verifikasi Reimbursement',
+  '/tim-keuangan/pembayaran': 'Pembayaran',
+  '/tim-keuangan/laporan-keuangan': 'Laporan Keuangan',
+  '/atasan-approver/dashboard-atasan': 'Dashboard Persetujuan',
+  '/atasan-approver/persetujuan': 'Persetujuan',
+  '/atasan-approver/persetujuan-riwayat': 'Riwayat Persetujuan',
+  '/super-admin/dashboard-admin': 'Dashboard Admin',
+  '/super-admin/manajemen-pengguna': 'Manajemen Pengguna',
+  '/super-admin/departemen': 'Departemen',
+  '/super-admin/kebijakan': 'Kebijakan Perjalanan',
+  '/super-admin/role': 'Role & Permission',
+  '/admin-travel/dashboard-travel': 'Dashboard Admin Travel',
+  '/admin-travel/antrean': 'Antrean Perjalanan',
+  '/admin-travel/booking': 'Booking Managementl'
+}
 
-  const currentPageLabel = computed(() => {
+const currentPageLabel = computed(() => {
     if (route.path === '/karyawan/dinas-detail') {
       const id = Number(route.query.id)
 
@@ -84,7 +86,11 @@
       </button>
 
       <!-- Notification Bell with Badge -->
-      <button class="relative rounded-full p-1.5 text-[#6d6a63] transition-colors hover:bg-[#f1eee8] hover:text-[#272621]">
+      <NuxtLink
+        to="/notifikasi"
+        aria-label="Buka notifikasi"
+        class="relative rounded-full p-1.5 text-[#6d6a63] transition-colors hover:bg-[#f1eee8] hover:text-[#272621]"
+      >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-0.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
@@ -92,7 +98,7 @@
         <span class="absolute -right-0.5 -top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-[#c94c3f] px-0.5 text-[7px] font-bold text-white">
           3
         </span>
-      </button>
+      </NuxtLink>
 
       <!-- User Profile Avatar & Name -->
       <div class="flex items-center gap-2 border-l border-[#e5e0d7] pl-3">

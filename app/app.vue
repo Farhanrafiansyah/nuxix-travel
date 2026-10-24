@@ -35,7 +35,7 @@ onMounted(async () => {
     <div class="ml-[190px] flex min-h-screen min-w-0 flex-1 flex-col">
       <Navbar />
 
-      <main class="flex-1 px-5 pb-5 pt-[76px] xl:px-6 xl:pb-6">
+      <main class="flex-1 px-5 pb-5 pt-[64px] xl:px-6 xl:pb-6">
         <NuxtPage />
       </main>
     </div>
