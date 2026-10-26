@@ -136,7 +136,7 @@ const activeTab = ref<BookingType>('TRANSPORTATION')
 const currentPage = ref(1)
 
 const activeColumns = computed(() => detailColumns[activeTab.value])
-const columnCount = computed(() => activeColumns.value.length + 3)
+const columnCount = computed(() => activeColumns.value.length + 4)
 const visibleBookings = computed(() => activeTab.value === 'TRANSPORTATION'
   ? bookings.value
   : bookings.value.filter((booking) =>
@@ -256,6 +256,7 @@ onMounted(loadBookings)
               <th scope="col" class="px-2.5 py-2.5">Tujuan</th>
               <th v-for="column in activeColumns" :key="column.label" scope="col" class="px-2.5 py-2.5">{{ column.label }}</th>
               <th scope="col" class="px-2.5 py-2.5">Status Perjalanan</th>
+              <th scope="col" class="px-2.5 py-2.5">Perjalanan</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-[#e8eee5] text-[#263b31]">
@@ -268,8 +269,15 @@ onMounted(loadBookings)
             <tr v-else-if="paginatedBookings.length === 0">
               <td :colspan="columnCount" class="px-4 py-12 text-center text-xs text-[#7b8980]">
                 {{ activeTab === 'ACCOMMODATION' && bookings.length > 0
-                  ? 'Belum ada booking dengan detail akomodasi di data Backend_UKK.'
-                  : 'Belum ada data booking di Backend_UKK. Seeder saat ini tidak membuat record booking.' }}
+                  ? 'Belum ada booking dengan detail akomodasi.'
+                  : 'Belum ada record booking. Seeder membuat data perjalanan dan fulfillment, tetapi tidak membuat booking terstruktur.' }}
+                <NuxtLink
+                  v-if="bookings.length === 0"
+                  to="/admin-travel/antrean"
+                  class="ml-1 font-semibold text-[#31513f] underline underline-offset-2 hover:text-[#173b30]"
+                >
+                  Buka antrean perjalanan
+                </NuxtLink>
               </td>
             </tr>
             <tr v-for="booking in paginatedBookings" v-else :key="booking.id" class="transition-colors hover:bg-[#fbfcfa]">
@@ -289,6 +297,14 @@ onMounted(loadBookings)
                 <span class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] font-semibold" :class="statusStyles[booking.travel_status]">
                   {{ statusLabels[booking.travel_status] }}
                 </span>
+              </td>
+              <td class="px-2.5 py-3">
+                <NuxtLink
+                  :to="{ path: '/admin-travel/kelola-perjalanan', query: { id: booking.travel_request_id } }"
+                  class="inline-flex rounded-md border border-[#dfe8dc] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#173b30] transition-colors hover:bg-[#f8faf6]"
+                >
+                  Kelola
+                </NuxtLink>
               </td>
             </tr>
           </tbody>

@@ -20,7 +20,6 @@ type TripRecord = {
   status: TripStatus
 }
 
-const STORAGE_KEY = 'dashboard-super-admin-state-v1'
 const recentUserLimit = 5
 const chartDepartmentLimit = 6
 
@@ -43,9 +42,11 @@ const tripStatusLabels: Record<TripStatus, string> = {
 
 const today = new Date()
 
+const authToken = useCookie<string | null>('auth_token')
 const users = ref<SystemUser[]>([])
 const trips = ref<TripRecord[]>([])
-const isHydrated = ref(false)
+const liveStats = ref<{ upcoming: number; ongoing: number; completed: number } | null>(null)
+const isLoading = ref(true)
 const activeModal = ref<ActiveModal>(null)
 
 const toDateInput = (date: Date) => {
@@ -75,44 +76,20 @@ const userInitials = (name: string) => name
   .join('')
   .toUpperCase() || 'KP'
 
-const isInMonth = (date: string, reference: Date) => {
-  const parsedDate = new Date(date)
-  return parsedDate.getMonth() === reference.getMonth() && parsedDate.getFullYear() === reference.getFullYear()
-}
-
-// ---------- Statistik ----------
+// ---------- Statistik Real Server ----------
 const activeEmployees = computed(() => users.value.filter(
   (user) => user.role === 'Karyawan' && user.status === 'ACTIVE'
 ))
 
 const employeeDepartmentCount = computed(() => new Set(
-  activeEmployees.value.map((user) => user.department).filter(Boolean)
+  users.value.map((user) => user.department).filter(Boolean)
 ).size)
-
-const waitingTripCount = computed(() => trips.value.filter((trip) => trip.status === 'WAITING').length)
-
-const tripsThisMonth = computed(() => trips.value.filter((trip) => isInMonth(trip.date, today)))
-const tripsLastMonth = computed(() => {
-  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-  return trips.value.filter((trip) => isInMonth(trip.date, lastMonth))
-})
-
-const tripGrowthNote = computed(() => {
-  const previous = tripsLastMonth.value.length
-  const current = tripsThisMonth.value.length
-
-  if (!previous) return 'Belum ada data bulan lalu'
-  if (current === previous) return 'Sama dengan bulan lalu'
-
-  const percentage = Math.round((Math.abs(current - previous) / previous) * 100)
-  return `${current > previous ? 'Naik' : 'Turun'} ${percentage}% dari bulan lalu`
-})
 
 const statCards = computed(() => [
   {
     label: 'Total Pengguna',
     value: users.value.length,
-    note: 'Seluruh role sistem',
+    note: 'Seluruh role sistem terdaftar',
     accent: 'border-l-[#e0a93a]'
   },
   {
@@ -123,23 +100,25 @@ const statCards = computed(() => [
   },
   {
     label: 'Pengajuan Menunggu',
-    value: waitingTripCount.value,
-    note: 'Perlu tindakan berjenjang',
+    value: liveStats.value?.upcoming ?? 0,
+    note: 'Perlu persetujuan / fulfillment',
     accent: 'border-l-[#c8702a]'
   },
   {
-    label: 'Total Perjalanan Bulan Ini',
-    value: tripsThisMonth.value.length,
-    note: tripGrowthNote.value,
+    label: 'Perjalanan Berjalan',
+    value: liveStats.value?.ongoing ?? 0,
+    note: `${liveStats.value?.completed ?? 0} perjalanan telah selesai`,
     accent: 'border-l-[#2f6b5e]'
   }
 ])
 
-// ---------- Grafik per departemen ----------
+// ---------- Distribusi Departemen Real ----------
 const departmentTrips = computed(() => {
   const groups = new Map<string, number>()
-  trips.value.forEach((trip) => {
-    groups.set(trip.department, (groups.get(trip.department) ?? 0) + 1)
+  users.value.forEach((user) => {
+    if (user.department) {
+      groups.set(user.department, (groups.get(user.department) ?? 0) + 1)
+    }
   })
 
   return [...groups.entries()]
@@ -148,24 +127,18 @@ const departmentTrips = computed(() => {
     .slice(0, chartDepartmentLimit)
 })
 
-const maxDepartmentTrips = computed(() => Math.max(...departmentTrips.value.map((item) => item.total), 0))
+const maxDepartmentTrips = computed(() => Math.max(...departmentTrips.value.map((item) => item.total), 1))
 
-const barHeight = (total: number) => `${Math.max((total / maxDepartmentTrips.value) * 100, 4)}%`
+const barHeight = (total: number) => `${Math.max((total / maxDepartmentTrips.value) * 100, 10)}%`
 
 // ---------- Pengguna terbaru ----------
 const recentUsers = computed(() => [...users.value]
-  .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
+  .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '') || b.id - a.id)
   .slice(0, recentUserLimit))
 
 const departmentOptions = computed(() => [
-  ...new Set([
-    ...users.value.map((user) => user.department),
-    ...trips.value.map((trip) => trip.department)
-  ].filter(Boolean))
+  ...new Set(users.value.map((user) => user.department).filter(Boolean))
 ].sort())
-
-// ---------- Aksi ----------
-const nextId = (items: { id: number }[]) => items.reduce((max, item) => Math.max(max, item.id), 0) + 1
 
 const closeModal = () => {
   activeModal.value = null
@@ -174,315 +147,204 @@ const closeModal = () => {
 const openUserModal = () => {
   userForm.name = ''
   userForm.role = 'Karyawan'
-  userForm.department = ''
+  userForm.department = departmentOptions.value[0] || 'IT'
   userForm.status = 'ACTIVE'
   activeModal.value = 'user'
 }
 
-const openTripModal = () => {
-  tripForm.department = ''
-  tripForm.date = toDateInput(new Date())
-  tripForm.status = 'WAITING'
-  activeModal.value = 'trip'
-}
+const submitUser = async () => {
+  if (!authToken.value) return
 
-const submitUser = () => {
-  users.value.push({
-    id: nextId(users.value),
-    name: userForm.name.trim(),
-    role: userForm.role,
-    department: userForm.department.trim(),
-    status: userForm.status,
-    created_at: new Date().toISOString()
-  })
-  closeModal()
-}
-
-const submitTrip = () => {
-  trips.value.push({
-    id: nextId(trips.value),
-    department: tripForm.department.trim(),
-    date: tripForm.date,
-    status: tripForm.status
-  })
-  closeModal()
-}
-
-const removeUser = (id: number) => {
-  users.value = users.value.filter((user) => user.id !== id)
-}
-
-// Data disimpan di browser. Ganti bagian ini dengan pemanggilan API
-// ($fetch + Authorization Bearer) ketika endpoint Super Admin sudah tersedia.
-onMounted(() => {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const payload = {
+      name: userForm.name.trim(),
+      email: `${userForm.name.trim().toLowerCase().replace(/\s+/g, '')}@nuvix.local`,
+      password: 'Password123!',
+      role: userForm.role,
+      department: userForm.department.trim(),
+      company_id: 1,
+      supervisor_id: 26
+    }
 
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      users.value = parsed.users ?? []
-      trips.value = parsed.trips ?? []
+    const created = await $fetch<any>('http://localhost:8000/api/users', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken.value}` },
+      body: payload
+    })
+
+    if (created?.user) {
+      users.value.unshift({
+        id: created.user.id,
+        name: created.user.name,
+        role: created.user.role,
+        department: created.user.department,
+        status: 'ACTIVE',
+        created_at: new Date().toISOString()
+      })
     }
   } catch (error) {
-    console.error('Gagal membaca data dashboard Super Admin dari penyimpanan lokal.', error)
+    console.error('Gagal tambah pengguna via dashboard:', error)
   }
 
-  isHydrated.value = true
-})
+  closeModal()
+}
 
-watch([users, trips], () => {
-  if (!isHydrated.value) return
+// Mengambil data murni dari endpoint Backend_UKK (/api/users dan /api/dashboard/stats)
+onMounted(async () => {
+  if (!authToken.value) {
+    await navigateTo('/login')
+    return
+  }
+
+  isLoading.value = true
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ users: users.value, trips: trips.value }))
+    const headers = { Authorization: `Bearer ${authToken.value}` }
+    const [usersRes, statsRes] = await Promise.all([
+      $fetch<{ users: any[] }>('http://localhost:8000/api/users', { headers }),
+      $fetch<{ upcoming: number; ongoing: number; completed: number }>('http://localhost:8000/api/dashboard/stats', { headers }).catch(() => null)
+    ])
+
+    if (usersRes?.users) {
+      users.value = usersRes.users.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        department: u.department,
+        status: (u.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE') as UserStatus,
+        created_at: u.created_at || new Date().toISOString()
+      }))
+    }
+
+    if (statsRes) {
+      liveStats.value = statsRes
+    }
   } catch (error) {
-    console.error('Gagal menyimpan data dashboard Super Admin ke penyimpanan lokal.', error)
+    console.error('Gagal memuat data dashboard real:', error)
+  } finally {
+    isLoading.value = false
   }
-}, { deep: true })
+})
 </script>
 
 <template>
   <section class="space-y-5 pb-8">
     <div>
       <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Dashboard Super Admin</h1>
-      <p class="mt-1 text-xs text-[#718078]">Ringkasan sistem, pengguna, dan aktivitas perjalanan dinas perusahaan.</p>
+      <p class="mt-1 text-xs text-[#718078]">Ringkasan sistem, pengguna, dan aktivitas perjalanan dinas perusahaan (Real Database).</p>
     </div>
 
+    <!-- 4 Kartu Statistik -->
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <section
         v-for="card in statCards"
         :key="card.label"
-        class="rounded-xl border border-l-[3px] border-[#dfe8dc] bg-white px-4 py-3"
+        class="rounded-xl border border-l-[3px] border-[#dfe8dc] bg-white px-4 py-3 shadow-sm"
         :class="card.accent"
         :aria-label="card.label"
       >
         <p class="text-[10px] font-medium text-[#718078]">{{ card.label }}</p>
         <p class="mt-1 font-serif text-xl font-bold text-[#173b30]">{{ card.value }}</p>
-        <p class="mt-1 text-[10px] text-[#7b8980]">{{ card.note }}</p>
+        <p class="mt-0.5 text-[9px] text-[#7b8980]">{{ card.note }}</p>
       </section>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
-      <section class="rounded-xl border border-[#dfe8dc] bg-white px-4 py-4" aria-labelledby="department-trip-heading">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="department-trip-heading" class="font-serif text-sm font-bold text-[#173b30]">Perjalanan per Departemen</h2>
-          <button
-            type="button"
-            class="rounded-md border border-[#dfe8dc] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#31513f] transition-colors hover:bg-[#f8faf6]"
-            @click="openTripModal"
-          >
-            + Tambah Perjalanan
-          </button>
+    <!-- Grafik Departemen & Ringkasan Pengguna -->
+    <div class="grid gap-4 lg:grid-cols-3">
+      <!-- Grafik Pengguna per Departemen -->
+      <section class="rounded-xl border border-[#dfe8dc] bg-white p-4 shadow-sm lg:col-span-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="font-serif text-sm font-bold text-[#173b30]">Distribusi Pengguna per Departemen</h2>
+            <p class="text-[10px] text-[#718078]">Jumlah karyawan & staf yang terdaftar berdasarkan unit kerja.</p>
+          </div>
+          <NuxtLink to="/super-admin/departemen" class="text-[10px] font-semibold text-[#1f6655] hover:underline">
+            Lihat Semua →
+          </NuxtLink>
         </div>
 
-        <p v-if="departmentTrips.length === 0" class="py-20 text-center text-xs text-[#7b8980]">Belum ada data perjalanan.</p>
+        <div v-if="departmentTrips.length === 0" class="flex h-44 items-center justify-center text-xs text-[#7b8980]">
+          Memuat data departemen...
+        </div>
 
-        <div v-else class="mt-5 px-2">
-          <div class="flex h-48 items-end gap-4 border-b border-[#e8eee5] sm:gap-6">
+        <div v-else class="mt-6 flex h-44 items-end justify-between gap-3 border-b border-dashed border-[#dfe8dc] pb-2">
+          <div
+            v-for="item in departmentTrips"
+            :key="item.department"
+            class="flex flex-1 flex-col items-center gap-1.5 h-full justify-end"
+          >
+            <span class="text-[9px] font-bold text-[#173b30]">{{ item.total }} user</span>
             <div
-              v-for="item in departmentTrips"
-              :key="item.department"
-              class="flex h-full flex-1 items-end justify-center"
-            >
-              <div
-                class="w-full max-w-[56px] rounded-t-md bg-gradient-to-b from-[#8fbc84] to-[#4a7a4a]"
-                :style="{ height: barHeight(item.total) }"
-                :title="`${item.department}: ${item.total} perjalanan`"
-                role="img"
-                :aria-label="`${item.department}: ${item.total} perjalanan`"
-              />
-            </div>
-          </div>
-          <div class="mt-2 flex gap-4 sm:gap-6">
-            <span
-              v-for="item in departmentTrips"
-              :key="item.department"
-              class="flex-1 truncate text-center text-[9px] font-medium text-[#718078]"
-              :title="item.department"
-            >
+              class="w-full max-w-[42px] rounded-t-md bg-[#2e6d73] transition-all hover:bg-[#1f565b]"
+              :style="{ height: barHeight(item.total) }"
+            />
+            <span class="truncate text-center text-[9px] font-medium text-[#718078] max-w-[60px]" :title="item.department">
               {{ item.department }}
             </span>
           </div>
         </div>
       </section>
 
-      <section class="overflow-hidden rounded-xl border border-[#dfe8dc] bg-white" aria-labelledby="recent-users-heading">
-        <div class="flex flex-wrap items-center justify-between gap-3 px-4 pb-1 pt-4">
-          <h2 id="recent-users-heading" class="font-serif text-sm font-bold text-[#173b30]">Pengguna Terbaru</h2>
-          <div class="flex items-center gap-3">
-            <button
-              type="button"
-              class="rounded-md border border-[#dfe8dc] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#31513f] transition-colors hover:bg-[#f8faf6]"
-              @click="openUserModal"
-            >
-              + Tambah
-            </button>
-            <NuxtLink to="/pengguna" class="text-[10px] font-semibold text-[#9a5a12] hover:underline">
-              Kelola Pengguna
-            </NuxtLink>
-          </div>
+      <!-- Pengguna Terbaru -->
+      <section class="rounded-xl border border-[#dfe8dc] bg-white p-4 shadow-sm">
+        <div class="flex items-center justify-between">
+          <h2 class="font-serif text-sm font-bold text-[#173b30]">Pengguna Terbaru</h2>
+          <NuxtLink to="/super-admin/manajemen-pengguna" class="text-[10px] font-semibold text-[#1f6655] hover:underline">
+            Semua →
+          </NuxtLink>
         </div>
 
-        <div class="overflow-x-auto px-3.5 pb-2">
-          <table class="w-full min-w-[360px] border-collapse text-left text-[10px]">
-            <thead class="border-b border-dashed border-[#dfe8dc] text-[9px] font-semibold text-[#728078]">
-              <tr>
-                <th scope="col" class="px-2.5 py-2.5">Nama</th>
-                <th scope="col" class="px-2.5 py-2.5">Role</th>
-                <th scope="col" class="px-2.5 py-2.5">Status</th>
-                <th scope="col" class="w-8 px-2.5 py-2.5"><span class="sr-only">Aksi</span></th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-[#e8eee5] text-[#263b31]">
-              <tr v-if="recentUsers.length === 0">
-                <td colspan="4" class="px-4 py-12 text-center text-xs text-[#7b8980]">Belum ada pengguna.</td>
-              </tr>
-              <tr v-for="user in recentUsers" v-else :key="user.id" class="transition-colors hover:bg-[#fbfcfa]">
-                <td class="whitespace-nowrap px-2.5 py-3">
-                  <div class="flex items-center gap-2">
-                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#fae4ba] text-[9px] font-bold text-[#8a5408]">
-                      {{ userInitials(user.name) }}
-                    </span>
-                    <span class="font-medium">{{ user.name }}</span>
-                  </div>
-                </td>
-                <td class="whitespace-nowrap px-2.5 py-3">{{ user.role }}</td>
-                <td class="px-2.5 py-3">
-                  <span class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] font-semibold" :class="userStatusStyles[user.status]">
-                    {{ userStatusLabels[user.status] }}
-                  </span>
-                </td>
-                <td class="px-2.5 py-3 text-center">
-                  <button
-                    type="button"
-                    class="rounded px-1.5 text-sm leading-none text-[#718078] transition-colors hover:bg-rose-50 hover:text-rose-700"
-                    aria-label="Hapus pengguna"
-                    @click="removeUser(user.id)"
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="mt-4 divide-y divide-[#edf3eb]">
+          <div
+            v-for="user in recentUsers"
+            :key="user.id"
+            class="flex items-center justify-between py-2.5 text-[10px]"
+          >
+            <div class="flex items-center gap-2">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#fae4ba] text-[9px] font-bold text-[#8a5408]">
+                {{ userInitials(user.name) }}
+              </span>
+              <div>
+                <p class="font-semibold text-[#173b30]">{{ user.name }}</p>
+                <p class="text-[9px] text-[#718078]">{{ user.department }}</p>
+              </div>
+            </div>
+            <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[8px] font-medium text-slate-600">
+              {{ user.role }}
+            </span>
+          </div>
         </div>
       </section>
     </div>
 
+    <!-- Quick Action Tambah Pengguna Modal -->
     <div
-      v-if="activeModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[#173b30]/40 px-4 py-6"
-      role="presentation"
-      @click.self="closeModal"
+      v-if="activeModal === 'user'"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
     >
-      <form
-        v-if="activeModal === 'user'"
-        class="w-full max-w-sm rounded-xl border border-[#dfe8dc] bg-white p-5 shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="user-add-heading"
-        @submit.prevent="submitUser"
-      >
-        <h2 id="user-add-heading" class="font-serif text-base font-bold text-[#173b30]">Tambah Pengguna</h2>
-
-        <div class="mt-4 space-y-3">
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Nama</span>
-            <input
-              v-model="userForm.name"
-              type="text"
-              required
-              autocomplete="off"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Role</span>
-            <select
-              v-model="userForm.role"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
+      <div class="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
+        <h3 class="font-serif text-sm font-bold text-[#173b30]">Tambah Pengguna Cepat</h3>
+        <div class="mt-3 space-y-2.5 text-xs">
+          <div>
+            <label class="block text-[10px] font-medium text-[#718078]">Nama Lengkap</label>
+            <input v-model="userForm.name" type="text" class="h-8 w-full rounded border border-[#dfe8dc] px-2.5 text-[11px]" placeholder="Nama pengguna" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-[#718078]">Peran</label>
+            <select v-model="userForm.role" class="h-8 w-full rounded border border-[#dfe8dc] px-2 text-[11px]">
               <option v-for="role in userRoles" :key="role" :value="role">{{ role }}</option>
             </select>
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Departemen</span>
-            <input
-              v-model="userForm.department"
-              type="text"
-              list="admin-department-options"
-              autocomplete="off"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Status</span>
-            <select
-              v-model="userForm.status"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-              <option v-for="(label, status) in userStatusLabels" :key="status" :value="status">{{ label }}</option>
-            </select>
-          </label>
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-[#718078]">Departemen</label>
+            <input v-model="userForm.department" type="text" class="h-8 w-full rounded border border-[#dfe8dc] px-2.5 text-[11px]" placeholder="Departemen" />
+          </div>
         </div>
-
-        <div class="mt-5 flex justify-end gap-2">
-          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px] font-semibold text-[#31513f] hover:bg-[#f8faf6]" @click="closeModal">Batal</button>
-          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] hover:bg-[#e9a443]">Simpan</button>
+        <div class="mt-4 flex justify-end gap-2 text-xs">
+          <button type="button" @click="closeModal" class="rounded border px-3 py-1 text-[10px]">Batal</button>
+          <button type="button" @click="submitUser" class="rounded bg-[#f0ad4e] px-3 py-1 text-[10px] font-bold text-[#3b2a0d]">Simpan</button>
         </div>
-      </form>
-
-      <form
-        v-else-if="activeModal === 'trip'"
-        class="w-full max-w-sm rounded-xl border border-[#dfe8dc] bg-white p-5 shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trip-add-heading"
-        @submit.prevent="submitTrip"
-      >
-        <h2 id="trip-add-heading" class="font-serif text-base font-bold text-[#173b30]">Tambah Perjalanan</h2>
-
-        <div class="mt-4 space-y-3">
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Departemen</span>
-            <input
-              v-model="tripForm.department"
-              type="text"
-              list="admin-department-options"
-              required
-              autocomplete="off"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Tanggal perjalanan</span>
-            <input
-              v-model="tripForm.date"
-              type="date"
-              required
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-[10px] font-medium text-[#718078]">Status pengajuan</span>
-            <select
-              v-model="tripForm.status"
-              class="h-9 w-full rounded-md border border-[#dfe8dc] bg-white px-3 text-[11px] text-[#263b31] focus:border-[#9ab397] focus:outline-none"
-            >
-              <option v-for="(label, status) in tripStatusLabels" :key="status" :value="status">{{ label }}</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="mt-5 flex justify-end gap-2">
-          <button type="button" class="h-8 rounded-md border border-[#dfe8dc] px-3 text-[10px] font-semibold text-[#31513f] hover:bg-[#f8faf6]" @click="closeModal">Batal</button>
-          <button type="submit" class="h-8 rounded-md bg-[#f0ad4e] px-3 text-[10px] font-semibold text-[#3b2a0d] hover:bg-[#e9a443]">Simpan</button>
-        </div>
-      </form>
-
-      <datalist id="admin-department-options">
-        <option v-for="department in departmentOptions" :key="department" :value="department" />
-      </datalist>
+      </div>
     </div>
   </section>
 </template>

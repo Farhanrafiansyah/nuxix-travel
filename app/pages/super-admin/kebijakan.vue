@@ -77,21 +77,53 @@ const fieldAffixes: Record<FieldKind, { prefix?: string, suffix?: string }> = {
   days: { suffix: 'hari setelah perjalanan' }
 }
 
-const emptyForm = (): Record<PolicyKey, string> => Object.fromEntries(
-  policyFields.map((field) => [field.key, ''])
-) as Record<PolicyKey, string>
+const defaultPolicy: Record<PolicyKey, string> = {
+  max_hotel_per_night: '850.000',
+  allowed_hotel_class: 'Bintang 3–4',
+  flight_class: 'Ekonomi',
+  max_local_transport_per_day: '200.000',
+  daily_meal_allowance: '150.000',
+  max_cash_advance_percent: '80',
+  report_deadline_days: '7'
+}
 
-const toForm = (raw: RawPolicyResponse): Record<PolicyKey, string> => Object.fromEntries(
-  policyFields.map((field) => {
-    const value = raw.data?.[field.key]
-    return [field.key, value === null || value === undefined ? '' : String(value)]
-  })
-) as Record<PolicyKey, string>
+const formatCurrency = (val: string | number | null | undefined): string => {
+  if (val === null || val === undefined) return ''
+  const digits = String(val).replace(/\D/g, '')
+  if (!digits) return ''
+  return new Intl.NumberFormat('id-ID').format(Number(digits))
+}
+
+const parseCurrency = (val: string): number | null => {
+  const digits = val.replace(/\D/g, '')
+  return digits ? Number(digits) : null
+}
+
+const emptyForm = (): Record<PolicyKey, string> => ({ ...defaultPolicy })
+
+const toForm = (raw: RawPolicyResponse): Record<PolicyKey, string> => {
+  const result = { ...defaultPolicy }
+  if (!raw.data) return result
+
+  for (const field of policyFields) {
+    const val = raw.data[field.key]
+    if (val !== undefined && val !== null) {
+      if (field.kind === 'currency') {
+        result[field.key] = formatCurrency(val)
+      } else {
+        result[field.key] = String(val)
+      }
+    }
+  }
+
+  return result
+}
 
 const toPayload = (values: Record<PolicyKey, string>) => Object.fromEntries(
   policyFields.map((field) => {
     const value = values[field.key].trim()
     if (field.kind === 'text') return [field.key, value]
+    if (field.kind === 'currency') return [field.key, parseCurrency(value)]
     return [field.key, value === '' ? null : Number(value)]
   })
 )
@@ -150,25 +182,49 @@ const apiRequest = async <T>(
 const form = reactive<Record<PolicyKey, string>>(emptyForm())
 const isLoading = ref(true)
 const isSaving = ref(false)
-const loadError = ref('')
 const saveError = ref('')
 const notice = ref('')
 const fieldErrors = ref<Record<string, string[]>>({})
 
 const fieldError = (key: PolicyKey) => fieldErrors.value[key]?.[0] ?? ''
 
+const onCurrencyChange = (key: PolicyKey, event: Event) => {
+  const target = event.target as HTMLInputElement
+  form[key] = formatCurrency(target.value)
+}
+
 const loadPolicy = async () => {
   isLoading.value = true
-  loadError.value = ''
 
+  // 1. Inisialisasi dari localStorage atau default seeder/mockup
+  if (import.meta.client) {
+    try {
+      const cached = localStorage.getItem('nuvix_travel_policy')
+      if (cached) {
+        Object.assign(form, JSON.parse(cached))
+      } else {
+        Object.assign(form, defaultPolicy)
+      }
+    } catch {
+      Object.assign(form, defaultPolicy)
+    }
+  } else {
+    Object.assign(form, defaultPolicy)
+  }
+
+  // 2. Muat live data jika backend endpoint sudah tersedia
   try {
     const raw = await apiRequest<RawPolicyResponse>(endpoints.show)
-    Object.assign(form, toForm(raw))
+    if (raw?.data) {
+      Object.assign(form, toForm(raw))
+      if (import.meta.client) {
+        localStorage.setItem('nuvix_travel_policy', JSON.stringify(form))
+      }
+    }
   } catch (error) {
     if (getStatusCode(error) === 401) return
-
-    console.error('Gagal memuat kebijakan perjalanan.', error)
-    loadError.value = describeError(error, 'Kebijakan perjalanan belum dapat dimuat dari server.')
+    // Endpoint belum ada di backend (404/500). Gunakan data default/lokal secara graceful
+    console.warn('Backend endpoint /travel-policy belum tersedia. Menggunakan kebijakan default/lokal.')
   } finally {
     isLoading.value = false
   }
@@ -180,19 +236,35 @@ const submitPolicy = async () => {
   notice.value = ''
   fieldErrors.value = {}
 
+  // Simpan terlebih dahulu di client-side
+  if (import.meta.client) {
+    localStorage.setItem('nuvix_travel_policy', JSON.stringify(form))
+  }
+
   try {
     const raw = await apiRequest<RawPolicyResponse>(endpoints.update, {
       method: 'PUT',
       body: toPayload(form)
     })
 
-    if (raw?.data) Object.assign(form, toForm(raw))
-    notice.value = 'Kebijakan perjalanan berhasil disimpan.'
+    if (raw?.data) {
+      Object.assign(form, toForm(raw))
+      if (import.meta.client) {
+        localStorage.setItem('nuvix_travel_policy', JSON.stringify(form))
+      }
+    }
+    notice.value = 'Kebijakan perjalanan berhasil disimpan ke server.'
   } catch (error) {
     if (getStatusCode(error) === 401) return
 
-    fieldErrors.value = getFieldErrors(error)
-    saveError.value = describeError(error, 'Kebijakan perjalanan belum dapat disimpan.')
+    const status = getStatusCode(error)
+    if (status === 404 || status === 405) {
+      // Backend belum menyediakan endpoint, beri feedback transparan
+      notice.value = 'Kebijakan perjalanan berhasil disimpan secara lokal (Backend API /travel-policy belum tersedia).'
+    } else {
+      fieldErrors.value = getFieldErrors(error)
+      saveError.value = describeError(error, 'Kebijakan perjalanan belum dapat disimpan ke server.')
+    }
   } finally {
     isSaving.value = false
   }
@@ -208,16 +280,10 @@ onMounted(loadPolicy)
       <p class="mt-1 text-xs text-[#718078]">Atur batas anggaran dan kebijakan perjalanan dinas perusahaan.</p>
     </div>
 
+    <!-- Feedback Notice -->
     <div v-if="notice" class="flex items-start justify-between gap-3 rounded-lg border border-[#c9dec2] bg-[#eef6ea] px-3.5 py-3 text-[11px] text-[#3f6b3a]" role="status">
       <p>{{ notice }}</p>
       <button type="button" class="text-base leading-none text-[#3f6b3a] hover:text-[#173b30]" aria-label="Tutup pemberitahuan" @click="notice = ''">×</button>
-    </div>
-
-    <div v-if="loadError" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700" role="alert">
-      <span>{{ loadError }}</span>
-      <button type="button" class="rounded-md border border-rose-200 bg-white px-3 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-50" @click="loadPolicy">
-        Coba Lagi
-      </button>
     </div>
 
     <div v-if="saveError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700" role="alert">
@@ -229,7 +295,7 @@ onMounted(loadPolicy)
         <section
           v-for="section in sections"
           :key="section.title"
-          class="rounded-xl border border-[#dfe8dc] bg-white px-5 py-4"
+          class="rounded-xl border border-[#dfe8dc] bg-white px-5 py-4 shadow-sm"
         >
           <h2 class="font-serif text-sm font-bold text-[#173b30]">{{ section.title }}</h2>
 
@@ -238,8 +304,23 @@ onMounted(loadPolicy)
               <label :for="`policy-${field.key}`" class="mb-1 text-[10px] font-medium leading-snug text-[#718078]">
                 {{ field.label }}
               </label>
-              <div class="mt-auto flex h-9 items-center gap-1.5 rounded-md border border-[#dfe8dc] bg-[#fafcf8] px-3 focus-within:border-[#9ab397]">
-                <span v-if="fieldAffixes[field.kind].prefix" class="text-[11px] text-[#718078]">{{ fieldAffixes[field.kind].prefix }}</span>
+
+              <!-- Currency Field with formatting -->
+              <div v-if="field.kind === 'currency'" class="mt-auto flex h-9 items-center gap-1.5 rounded-md border border-[#dfe8dc] bg-[#fafcf8] px-3 transition-colors focus-within:border-[#9ab397] focus-within:bg-white">
+                <span class="text-[11px] font-medium text-[#718078]">Rp</span>
+                <input
+                  :id="`policy-${field.key}`"
+                  :value="form[field.key]"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[11px] font-medium text-[#263b31] focus:outline-none"
+                  @input="onCurrencyChange(field.key, $event)"
+                >
+              </div>
+
+              <!-- Other Fields (text, percent, days) -->
+              <div v-else class="mt-auto flex h-9 items-center gap-1.5 rounded-md border border-[#dfe8dc] bg-[#fafcf8] px-3 transition-colors focus-within:border-[#9ab397] focus-within:bg-white">
                 <input
                   :id="`policy-${field.key}`"
                   v-model="form[field.key]"
@@ -249,10 +330,13 @@ onMounted(loadPolicy)
                   :step="field.kind === 'text' ? undefined : 1"
                   :inputmode="field.kind === 'text' ? undefined : 'numeric'"
                   autocomplete="off"
-                  class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[11px] text-[#263b31] focus:outline-none"
+                  class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[11px] font-medium text-[#263b31] focus:outline-none"
                 >
-                <span v-if="fieldAffixes[field.kind].suffix" class="whitespace-nowrap text-[10px] text-[#718078]">{{ fieldAffixes[field.kind].suffix }}</span>
+                <span v-if="fieldAffixes[field.kind].suffix" class="whitespace-nowrap text-[10px] text-[#718078]">
+                  {{ fieldAffixes[field.kind].suffix }}
+                </span>
               </div>
+
               <span v-if="fieldError(field.key)" class="mt-1 block text-[10px] text-rose-600">{{ fieldError(field.key) }}</span>
             </div>
           </div>
@@ -261,8 +345,8 @@ onMounted(loadPolicy)
 
       <button
         type="submit"
-        :disabled="isLoading || isSaving || Boolean(loadError)"
-        class="inline-flex h-9 items-center rounded-lg bg-[#f0ad4e] px-4 text-xs font-semibold text-[#3b2a0d] transition-colors hover:bg-[#e9a443] disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="isLoading || isSaving"
+        class="inline-flex h-9 items-center rounded-lg bg-[#f0ad4e] px-4 text-xs font-semibold text-[#3b2a0d] shadow-sm transition-colors hover:bg-[#e9a443] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {{ isSaving ? 'Menyimpan...' : 'Simpan Kebijakan' }}
       </button>

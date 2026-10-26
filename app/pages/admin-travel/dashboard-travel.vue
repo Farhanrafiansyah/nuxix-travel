@@ -244,7 +244,7 @@ onMounted(loadDashboard)
               </td>
               <td class="px-2.5 py-3">
                 <NuxtLink
-                  :to="{ path: '/admin-travel/booking', query: { travel_id: trip.id } }"
+                  :to="{ path: '/admin-travel/kelola-perjalanan', query: { id: trip.id } }"
                   class="inline-flex rounded-md border border-[#dfe8dc] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#173b30] transition-colors hover:bg-[#f8faf6]"
                 >
                   Kelola
