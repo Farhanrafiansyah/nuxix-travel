@@ -1,20 +1,33 @@
 <script setup lang="ts">
-type PendingTravel = {
+type TravelQueueItem = {
   id: number
   user_id: number
+  applicant_name: string
   destination: string
   start_date: string
   end_date: string
   estimated_cost: string | number | null
   purpose: string
   transportation_mode: string | null
-  status: 'APPROVED'
+  status: 'APPROVED' | 'FULFILLED' | 'COMPLETED'
+  fulfillments: Array<{
+    transport_details: string
+    accommodation_details: string
+    created_at: string
+  }>
 }
 
 type DashboardStats = {
   upcoming: number
   ongoing: number
   completed: number
+}
+
+type QueueResponse = {
+  requests: TravelQueueItem[]
+  pagination: {
+    total: number
+  }
 }
 
 type FetchErrorLike = {
@@ -27,7 +40,6 @@ type FetchErrorLike = {
 const runtimeConfig = useRuntimeConfig()
 const API_BASE_URL = String(runtimeConfig.public.apiBase || 'http://localhost:8000/api')
 const QUEUE_LIMIT = 5
-
 const authToken = useCookie<string | null>('auth_token')
 
 const getStatusCode = (error: unknown) => {
@@ -90,7 +102,8 @@ const formatDate = (date: string | undefined) => {
 }
 
 const stats = ref<DashboardStats | null>(null)
-const queue = ref<PendingTravel[]>([])
+const queue = ref<TravelQueueItem[]>([])
+const waitingFulfillmentCount = ref(0)
 const isLoading = ref(true)
 const loadError = ref('')
 
@@ -98,25 +111,25 @@ const statCards = computed(() => [
   {
     label: 'Pengajuan Baru',
     value: '—',
-    note: 'Statistik ini belum disediakan API',
+    note: 'Belum tersedia di API dashboard',
     accent: 'border-l-[#c8702a]'
   },
   {
     label: 'Menunggu Booking',
-    value: queue.value.length,
+    value: waitingFulfillmentCount.value,
     note: 'Perjalanan disetujui, menunggu fulfillment',
     accent: 'border-l-[#2f6b5e]'
   },
   {
     label: 'Perjalanan Berlangsung',
     value: stats.value?.ongoing ?? '—',
-    note: 'Statistik lintas perusahaan',
+    note: 'Status FULFILLED',
     accent: 'border-l-[#e0a93a]'
   },
   {
     label: 'Perjalanan Selesai',
     value: stats.value?.completed ?? '—',
-    note: 'Total; API belum memfilter per bulan',
+    note: 'Total status COMPLETED',
     accent: 'border-l-[#3f6b4f]'
   }
 ])
@@ -126,19 +139,23 @@ const loadDashboard = async () => {
   loadError.value = ''
 
   try {
-    const [pendingResponse, statsResponse] = await Promise.all([
-      apiRequest<{ pending: PendingTravel[] }>('/fulfillment/pending'),
+    const [queueResponse, statsResponse] = await Promise.all([
+      apiRequest<QueueResponse>('/fulfillment/queue', {
+        query: { status: 'APPROVED', page: 1, limit: QUEUE_LIMIT }
+      }),
       apiRequest<DashboardStats>('/dashboard/stats')
     ])
 
     stats.value = statsResponse
-    queue.value = pendingResponse.pending.slice(0, QUEUE_LIMIT)
+    waitingFulfillmentCount.value = queueResponse.pagination.total
+    queue.value = queueResponse.requests
   } catch (error) {
     if (getStatusCode(error) === 401) return
 
     console.error('Gagal memuat dashboard Admin Travel.', error)
     queue.value = []
     stats.value = null
+    waitingFulfillmentCount.value = 0
     loadError.value = describeError(error, 'Dashboard Admin Travel belum dapat dimuat dari server.')
   } finally {
     isLoading.value = false
@@ -211,18 +228,18 @@ onMounted(loadDashboard)
               <td class="whitespace-nowrap px-2.5 py-3">
                 <div class="flex items-center gap-2">
                   <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#fae4ba] text-[9px] font-bold text-[#8a5408]">
-                    #{{ trip.user_id }}
+                    {{ trip.applicant_name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() }}
                   </span>
-                  <span class="font-medium">ID Karyawan {{ trip.user_id }}</span>
+                  <span class="font-medium">{{ trip.applicant_name }}</span>
                 </div>
               </td>
               <td class="whitespace-nowrap px-2.5 py-3">{{ trip.destination }}</td>
               <td class="whitespace-nowrap px-2.5 py-3">{{ formatDate(trip.start_date) }}</td>
               <td class="px-2.5 py-3">{{ trip.transportation_mode || '—' }}</td>
-              <td class="px-2.5 py-3">—</td>
+              <td class="px-2.5 py-3">{{ trip.fulfillments[0]?.accommodation_details || '—' }}</td>
               <td class="px-2.5 py-3">
                 <span class="inline-flex whitespace-nowrap rounded-full bg-[#e1efdc] px-2.5 py-1 text-[9px] font-semibold text-[#3f6b3a]">
-                  Disetujui
+                  {{ trip.status === 'APPROVED' ? 'Disetujui' : trip.status === 'FULFILLED' ? 'Diproses Travel' : 'Selesai' }}
                 </span>
               </td>
               <td class="px-2.5 py-3">

@@ -1,28 +1,33 @@
 <script setup lang="ts">
-type TripStatus = 'APPROVED' | 'FULFILLED' | 'COMPLETED' | 'REJECTED' | 'PENDING'
+type TripStatus = 'APPROVED' | 'FULFILLED' | 'COMPLETED'
 type StageFilter = '' | 'WAITING_BOOKING' | 'PROCESSING' | 'ONGOING' | 'COMPLETED'
 
-type TravelQueueRecord = {
+interface TravelQueueRecord {
   id: number
   user_id: number
-  employee_name: string
+  applicant_name: string
   destination: string
   start_date: string
   end_date: string
-  estimated_cost: string | number | null
   purpose: string
-  transportation: string | null
-  accommodation: string | null
+  transportation_mode: string | null
   status: TripStatus
-}
-
-type PendingTravelResponse = {
-  pending: Array<Omit<TravelQueueRecord, 'employee_name' | 'transportation' | 'accommodation'> & {
-    transportation_mode: string | null
+  created_at: string
+  fulfillments: Array<{
+    transport_details: string
+    accommodation_details: string
+    created_at: string
   }>
 }
 
-type FetchErrorLike = {
+interface QueueResponse {
+  requests: TravelQueueRecord[]
+  pagination: {
+    total_pages: number
+  }
+}
+
+interface FetchErrorLike {
   status?: number
   statusCode?: number
   data?: { message?: string }
@@ -32,21 +37,19 @@ type FetchErrorLike = {
 const runtimeConfig = useRuntimeConfig()
 const API_BASE_URL = String(runtimeConfig.public.apiBase || 'http://localhost:8000/api')
 const PAGE_SIZE = 7
+const API_PAGE_SIZE = 100
+const apiStatuses: TripStatus[] = ['APPROVED', 'FULFILLED', 'COMPLETED']
 
 const statusLabels: Record<TripStatus, string> = {
   APPROVED: 'Disetujui',
   FULFILLED: 'Dipenuhi',
-  COMPLETED: 'Selesai',
-  REJECTED: 'Ditolak',
-  PENDING: 'Menunggu Atasan'
+  COMPLETED: 'Selesai'
 }
 
 const statusStyles: Record<TripStatus, string> = {
   APPROVED: 'bg-[#e1efdc] text-[#3f6b3a]',
   FULFILLED: 'bg-[#dcecec] text-[#2f6b6b]',
-  COMPLETED: 'bg-[#e4f0e1] text-[#456d43]',
-  REJECTED: 'bg-[#fbe3e1] text-[#a8403a]',
-  PENDING: 'bg-[#fff0df] text-[#b75d11]'
+  COMPLETED: 'bg-[#e4f0e1] text-[#456d43]'
 }
 
 const stageTabs: { value: StageFilter, label: string }[] = [
@@ -74,14 +77,7 @@ const describeError = (error: unknown, fallback: string) => {
   return fetchError.data?.message || fetchError.message || fallback
 }
 
-const apiRequest = async <T>(
-  path: string,
-  options: {
-    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-    query?: Record<string, string | number | undefined>
-    body?: Record<string, unknown>
-  } = {}
-): Promise<T> => {
+const apiRequest = async <T>(path: string, query: Record<string, string | number | undefined> = {}): Promise<T> => {
   if (!authToken.value) {
     await navigateTo('/login')
     throw Object.assign(new Error('Sesi berakhir. Silakan masuk kembali.'), { statusCode: 401 })
@@ -89,9 +85,7 @@ const apiRequest = async <T>(
 
   try {
     return await $fetch<T>(`${API_BASE_URL}${path}`, {
-      method: options.method ?? 'GET',
-      query: options.query,
-      body: options.body,
+      query,
       headers: {
         Authorization: `Bearer ${authToken.value}`,
         Accept: 'application/json'
@@ -133,28 +127,19 @@ const loadError = ref('')
 const searchQuery = ref('')
 const selectedStage = ref<StageFilter>('')
 const currentPage = ref(1)
+let latestRequestId = 0
 
-const hasActiveFilters = computed(() => Boolean(searchQuery.value.trim() || selectedStage.value))
+const activeStatus = computed<TripStatus | undefined>(() => {
+  if (selectedStage.value === 'WAITING_BOOKING') return 'APPROVED'
+  if (selectedStage.value === 'PROCESSING' || selectedStage.value === 'ONGOING') return 'FULFILLED'
+  if (selectedStage.value === 'COMPLETED') return 'COMPLETED'
+  return undefined
+})
 
 const filteredTrips = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase('id-ID')
-  return trips.value.filter((trip) => {
-    const matchesSearch = !query || [
-      trip.id,
-      trip.user_id,
-      trip.destination,
-      trip.purpose,
-      trip.transportation
-    ].some((value) => String(value || '').toLocaleLowerCase('id-ID').includes(query))
-
-    const matchesStage = !selectedStage.value
-      || (selectedStage.value === 'WAITING_BOOKING' && trip.status === 'APPROVED')
-      || (selectedStage.value === 'PROCESSING' && trip.status === 'FULFILLED')
-      || (selectedStage.value === 'ONGOING' && trip.status === 'FULFILLED')
-      || (selectedStage.value === 'COMPLETED' && trip.status === 'COMPLETED')
-
-    return matchesSearch && matchesStage
-  })
+  return activeStatus.value
+    ? trips.value.filter((trip) => trip.status === activeStatus.value)
+    : trips.value
 })
 
 const lastPage = computed(() => Math.max(1, Math.ceil(filteredTrips.value.length / PAGE_SIZE)))
@@ -171,26 +156,45 @@ const visiblePages = computed(() => {
 })
 
 const loadTrips = async () => {
+  const requestId = ++latestRequestId
   isLoading.value = true
   loadError.value = ''
 
   try {
-    const response = await apiRequest<PendingTravelResponse>('/fulfillment/pending')
-    trips.value = response.pending.map((trip) => ({
-      ...trip,
-      employee_name: `Karyawan #${trip.user_id}`,
-      transportation: trip.transportation_mode,
-      accommodation: null
+    const statuses = activeStatus.value ? [activeStatus.value] : apiStatuses
+    const queueGroups = await Promise.all(statuses.map(async (status) => {
+      const firstPage = await apiRequest<QueueResponse>('/fulfillment/queue', {
+        status,
+        search: searchQuery.value.trim() || undefined,
+        page: 1,
+        limit: API_PAGE_SIZE
+      })
+      const pageNumbers = Array.from(
+        { length: Math.max(0, firstPage.pagination.total_pages - 1) },
+        (_, index) => index + 2
+      )
+      const rest = await Promise.all(pageNumbers.map((page) =>
+        apiRequest<QueueResponse>('/fulfillment/queue', {
+          status,
+          search: searchQuery.value.trim() || undefined,
+          page,
+          limit: API_PAGE_SIZE
+        })
+      ))
+      return [firstPage, ...rest].flatMap((response) => response.requests)
     }))
+    if (requestId !== latestRequestId) return
+    trips.value = queueGroups.flat()
+      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
     currentPage.value = 1
   } catch (error) {
-    if (getStatusCode(error) === 401) return
+    if (requestId !== latestRequestId || getStatusCode(error) === 401) return
 
     console.error('Gagal memuat antrean perjalanan.', error)
     trips.value = []
     loadError.value = describeError(error, 'Antrean perjalanan belum dapat dimuat dari server.')
   } finally {
-    isLoading.value = false
+    if (requestId === latestRequestId) isLoading.value = false
   }
 }
 
@@ -201,6 +205,7 @@ const goToPage = (page: number) => {
 
 watch([searchQuery, selectedStage], () => {
   currentPage.value = 1
+  loadTrips()
 })
 
 onMounted(loadTrips)
@@ -210,7 +215,7 @@ onMounted(loadTrips)
   <section class="space-y-5 pb-8">
     <div>
       <h1 class="font-serif text-2xl font-bold leading-tight text-[#173b30]">Antrean Perjalanan</h1>
-      <p class="mt-1 text-xs text-[#718078]">Semua perjalanan dinas yang telah disetujui dan menunggu pemenuhan.</p>
+      <p class="mt-1 text-xs text-[#718078]">Pantau perjalanan karyawan berdasarkan status yang tersedia di Backend_UKK.</p>
     </div>
 
     <div v-if="loadError" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700" role="alert">
@@ -272,22 +277,22 @@ onMounted(loadTrips)
             </tr>
             <tr v-else-if="paginatedTrips.length === 0">
               <td colspan="7" class="px-4 py-12 text-center text-xs text-[#7b8980]">
-                {{ hasActiveFilters ? 'Tidak ada perjalanan yang cocok. API saat ini hanya mengirim perjalanan disetujui yang menunggu fulfillment.' : 'Belum ada perjalanan disetujui yang menunggu fulfillment.' }}
+                Tidak ada perjalanan yang cocok. Backend saat ini menyediakan status disetujui, dipenuhi, dan selesai; status menunggu atasan/ditolak belum tersedia di endpoint antrean Admin Travel.
               </td>
             </tr>
             <tr v-for="trip in paginatedTrips" v-else :key="trip.id" class="transition-colors hover:bg-[#fbfcfa]">
               <td class="whitespace-nowrap px-2.5 py-3">
                 <div class="flex items-center gap-2">
                   <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#fae4ba] text-[9px] font-bold text-[#8a5408]">
-                    {{ userInitials(trip.employee_name) }}
+                    {{ userInitials(trip.applicant_name) }}
                   </span>
-                  <span class="font-medium">{{ trip.employee_name }}</span>
+                  <span class="font-medium">{{ trip.applicant_name }}</span>
                 </div>
               </td>
               <td class="whitespace-nowrap px-2.5 py-3">{{ trip.destination }}</td>
               <td class="whitespace-nowrap px-2.5 py-3">{{ formatDate(trip.start_date) }}</td>
-              <td class="px-2.5 py-3">{{ trip.transportation || '—' }}</td>
-              <td class="px-2.5 py-3">{{ trip.accommodation || '—' }}</td>
+              <td class="px-2.5 py-3">{{ trip.fulfillments[0]?.transport_details || trip.transportation_mode || '—' }}</td>
+              <td class="px-2.5 py-3">{{ trip.fulfillments[0]?.accommodation_details || '—' }}</td>
               <td class="px-2.5 py-3">
                 <span class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] font-semibold" :class="statusStyles[trip.status]">
                   {{ statusLabels[trip.status] ?? trip.status }}
