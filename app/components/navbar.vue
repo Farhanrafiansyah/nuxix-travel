@@ -30,7 +30,8 @@ const pageLabels: Record<string, string> = {
   '/super-admin/role': 'Role & Permission',
   '/admin-travel/dashboard-travel': 'Dashboard Admin Travel',
   '/admin-travel/antrean': 'Antrean Perjalanan',
-  '/admin-travel/booking': 'Booking Management'
+  '/admin-travel/booking': 'Booking Management',
+  '/admin-travel/kelola-perjalanan': 'Kelola Perjalanan'
 }
 
 const currentPageLabel = computed(() => {
