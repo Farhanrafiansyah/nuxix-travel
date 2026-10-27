@@ -1,6 +1,11 @@
 <script setup lang="ts">
 const route = useRoute()
 const currentUser = useCurrentUser()
+const isMobileSidebarOpen = useState('mobile-sidebar-open', () => false)
+
+watch(() => route.path, () => {
+  isMobileSidebarOpen.value = false
+})
 
 type MenuItem = {
   label: string
@@ -108,8 +113,17 @@ const handleAction = async (action: (typeof actions)[number]) => {
 </script>
 
 <template>
+  <button
+    v-if="isMobileSidebarOpen"
+    type="button"
+    aria-label="Tutup menu"
+    class="fixed inset-0 z-30 bg-black/40 md:hidden"
+    @click="isMobileSidebarOpen = false"
+  />
   <aside
-    class="fixed inset-y-0 left-0 z-40 flex h-screen w-[190px] flex-col overflow-y-auto bg-gradient-to-b from-[#164A41] to-[#12403a] px-2.5 py-4 text-white [scrollbar-color:rgba(255,255,255,0.18)_transparent] [scrollbar-width:thin]"
+    id="app-sidebar"
+    class="fixed inset-y-0 left-0 z-40 flex h-screen w-4/5 max-w-[240px] flex-col overflow-y-auto bg-gradient-to-b from-[#164A41] to-[#12403a] px-2.5 py-4 text-white transition-transform duration-200 [scrollbar-color:rgba(255,255,255,0.18)_transparent] [scrollbar-width:thin] md:w-[190px] md:max-w-none md:translate-x-0 md:visible"
+    :class="isMobileSidebarOpen ? 'translate-x-0 visible' : '-translate-x-full invisible md:visible'"
   >
     <div class="mb-6 flex items-center gap-2.5 px-1.5">
       <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f6a623] text-white">

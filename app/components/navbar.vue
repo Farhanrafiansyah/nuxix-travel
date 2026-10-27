@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const currentUser = useCurrentUser()
+const isMobileSidebarOpen = useState('mobile-sidebar-open', () => false)
 
 const unreadCount = ref(0)
 
@@ -59,18 +60,34 @@ const unreadLabel = computed(() => unreadCount.value > 9 ? '9+' : String(unreadC
 
 <template>
   <header
-    class="fixed inset-x-0 left-[190px] top-0 z-30 flex h-14 items-center justify-between border-b border-[#e3ebe5] bg-white px-6 before:absolute before:inset-x-0 before:top-0 before:h-[2px] before:bg-gradient-to-r before:from-[#164A41] before:via-[#164A41]/30 before:to-transparent"
+    class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-[#e3ebe5] bg-white px-3 before:absolute before:inset-x-0 before:top-0 before:h-[2px] before:bg-gradient-to-r before:from-[#164A41] before:via-[#164A41]/30 before:to-transparent md:left-[190px] md:px-6"
   >
-    <nav class="flex items-center gap-2 text-xs leading-none" aria-label="Breadcrumb">
+    <div class="flex min-w-0 items-center gap-2">
+      <button
+        type="button"
+        :aria-expanded="isMobileSidebarOpen"
+        aria-controls="app-sidebar"
+        :aria-label="isMobileSidebarOpen ? 'Tutup menu' : 'Buka menu'"
+        class="shrink-0 rounded-md p-2 text-[#164A41] transition-colors hover:bg-[#eef4ea] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#164A41]/30 md:hidden"
+        @click="isMobileSidebarOpen = !isMobileSidebarOpen"
+      >
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path v-if="isMobileSidebarOpen" d="m6 6 12 12M18 6 6 18" />
+          <path v-else d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      <nav class="flex min-w-0 items-center gap-2 truncate text-xs leading-none" aria-label="Breadcrumb">
       <span class="font-medium text-[#7b8f86]">{{ currentUser?.role || 'Akun' }}</span>
       <svg class="h-3 w-3 text-[#c3d1ca]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m9 6 6 6-6 6" />
       </svg>
-      <span class="flex items-center gap-1.5 font-semibold text-[#173b30]" aria-current="page">
+      <span class="flex min-w-0 items-center gap-1.5 truncate font-semibold text-[#173b30]" aria-current="page">
         <span class="h-1.5 w-1.5 rounded-full bg-[#f6a623]" aria-hidden="true" />
-        {{ currentPageLabel }}
+        <span class="truncate">{{ currentPageLabel }}</span>
       </span>
-    </nav>
+      </nav>
+    </div>
 
     <div class="relative mx-6 hidden w-full max-w-[320px] sm:block">
       <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#8aa096]">
@@ -86,7 +103,7 @@ const unreadLabel = computed(() => unreadCount.value > 9 ? '9+' : String(unreadC
       >
     </div>
 
-    <div class="flex items-center gap-2">
+    <div class="flex shrink-0 items-center gap-1 sm:gap-2">
       <button
         type="button"
         aria-label="Ganti tema"
@@ -113,11 +130,11 @@ const unreadLabel = computed(() => unreadCount.value > 9 ? '9+' : String(unreadC
         </span>
       </NuxtLink>
 
-      <div class="flex items-center gap-2 border-l border-[#e3ebe5] pl-3">
+      <div class="flex items-center gap-2 border-l border-[#e3ebe5] pl-2 sm:pl-3">
         <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#164A41] text-[10px] font-bold text-[#fae4ba]">
           {{ userInitials }}
         </div>
-        <div class="flex flex-col text-left">
+        <div class="hidden flex-col text-left sm:flex">
           <span class="text-[11px] font-semibold leading-tight text-[#173b30]">{{ currentUser?.name || 'Memuat profil...' }}</span>
           <span class="text-[9px] leading-tight text-[#7b8f86]">{{ currentUser?.role || ' ' }}</span>
         </div>

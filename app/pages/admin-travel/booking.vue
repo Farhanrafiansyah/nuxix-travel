@@ -1,6 +1,32 @@
 <script setup lang="ts">
 type BookingType = 'TRANSPORTATION' | 'ACCOMMODATION'
-type TravelStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED' | 'COMPLETED'
+type TravelStatus = 'APPROVED' | 'FULFILLED' | 'COMPLETED'
+
+interface FulfillmentRecord {
+  id: number
+  transport_details: string
+  accommodation_details: string
+  created_at: string
+}
+
+interface FulfillmentTravelRecord {
+  id: number
+  user_id: number
+  applicant_name: string
+  destination: string
+  start_date: string
+  end_date: string
+  transportation_mode: string | null
+  status: TravelStatus
+  fulfillments: FulfillmentRecord[]
+}
+
+interface FulfillmentResponse {
+  requests: FulfillmentTravelRecord[]
+  pagination: {
+    total_pages: number
+  }
+}
 
 interface BookingRecord {
   id: number
@@ -33,11 +59,6 @@ interface BookingsResponse {
   }
 }
 
-interface BookingColumn {
-  label: string
-  render: (booking: BookingRecord) => string
-}
-
 interface FetchErrorLike {
   status?: number
   statusCode?: number
@@ -47,8 +68,9 @@ interface FetchErrorLike {
 
 const runtimeConfig = useRuntimeConfig()
 const API_BASE_URL = String(runtimeConfig.public.apiBase || 'http://localhost:8000/api')
-const PAGE_SIZE = 10
 const API_PAGE_SIZE = 100
+const PAGE_SIZE = 10
+const fulfillmentStatuses: TravelStatus[] = ['APPROVED', 'FULFILLED', 'COMPLETED']
 
 const bookingTabs: { value: BookingType, label: string }[] = [
   { value: 'TRANSPORTATION', label: 'Transportasi' },
@@ -56,7 +78,7 @@ const bookingTabs: { value: BookingType, label: string }[] = [
 ]
 
 const statusLabels: Record<TravelStatus, string> = {
-  PENDING: 'Menunggu Atasan',
+  PENDING: 'Menunggu',
   APPROVED: 'Disetujui',
   REJECTED: 'Ditolak',
   FULFILLED: 'Dipenuhi',
@@ -71,8 +93,22 @@ const statusStyles: Record<TravelStatus, string> = {
   COMPLETED: 'bg-[#e4f0e1] text-[#456d43]'
 }
 
+const authToken = useCookie<string | null>('auth_token')
+const bookings = ref<BookingRecord[]>([])
+const hasStructuredBookings = ref(true)
+const isLoading = ref(true)
+const loadError = ref('')
+const activeTab = ref<BookingType>('TRANSPORTATION')
+const currentPage = ref(1)
+
+const getStatusCode = (error: unknown) => {
+  const fetchError = error as FetchErrorLike
+  return fetchError.statusCode ?? fetchError.status
+}
+
 const formatDate = (date: string | null | undefined) => {
   if (!date) return ''
+
   const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
     ? new Date(`${date}T00:00:00`)
     : new Date(date)
@@ -86,40 +122,27 @@ const formatDate = (date: string | null | undefined) => {
 }
 
 const formatDateTime = (date: string | null | undefined) => {
-  const formattedDate = formatDate(date)
-  if (!formattedDate) return ''
+  if (!date) return ''
+  const parsedDate = new Date(date)
+  if (Number.isNaN(parsedDate.getTime())) return ''
 
-  const time = new Intl.DateTimeFormat('id-ID', {
+  const dateLabel = formatDate(date)
+  const timeLabel = new Intl.DateTimeFormat('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false
-  }).format(new Date(date as string))
+  }).format(parsedDate)
 
-  return `${formattedDate}, ${time}`
+  return dateLabel ? `${dateLabel}, ${timeLabel}` : ''
 }
 
 const formatDateRange = (start: string | null | undefined, end: string | null | undefined) => {
   const from = formatDate(start)
   const to = formatDate(end)
   if (from && to) return `${from} – ${to}`
-  return from || to
+  return from || to || '—'
 }
 
-const detailColumns: Record<BookingType, BookingColumn[]> = {
-  TRANSPORTATION: [
-    { label: 'Moda', render: (booking) => [booking.transportation_mode, booking.operator].filter(Boolean).join(' — ') },
-    { label: 'No. Booking', render: (booking) => booking.booking_code ?? '' },
-    { label: 'Jadwal', render: (booking) => formatDateTime(booking.departure_at) }
-  ],
-  ACCOMMODATION: [
-    { label: 'Hotel', render: (booking) => booking.hotel_name ?? '' },
-    { label: 'Tipe Kamar', render: (booking) => booking.room_type ?? '' },
-    { label: 'No. Booking', render: (booking) => booking.booking_code ?? '' },
-    { label: 'Check-in / Check-out', render: (booking) => formatDateRange(booking.check_in_date, booking.check_out_date) }
-  ]
-}
-
-const authToken = useCookie<string | null>('auth_token')
 const userInitials = (name: string) => name
   .trim()
   .split(/\s+/)
@@ -129,20 +152,64 @@ const userInitials = (name: string) => name
   .join('')
   .toUpperCase() || 'KP'
 
-const bookings = ref<BookingRecord[]>([])
-const isLoading = ref(true)
-const loadError = ref('')
-const activeTab = ref<BookingType>('TRANSPORTATION')
-const currentPage = ref(1)
+const fetchFulfillmentPage = (status: TravelStatus, page: number) =>
+  $fetch<FulfillmentResponse>(`${API_BASE_URL}/fulfillment/queue`, {
+    query: { status, page, limit: API_PAGE_SIZE },
+    headers: {
+      Authorization: `Bearer ${authToken.value}`,
+      Accept: 'application/json'
+    }
+  })
 
-const activeColumns = computed(() => detailColumns[activeTab.value])
-const columnCount = computed(() => activeColumns.value.length + 4)
+const loadFulfillmentFallback = async () => {
+  const groups = await Promise.all(fulfillmentStatuses.map(async (status) => {
+    const firstPage = await fetchFulfillmentPage(status, 1)
+    const remainingPages = await Promise.all(
+      Array.from(
+        { length: Math.max(0, firstPage.pagination.total_pages - 1) },
+        (_, index) => fetchFulfillmentPage(status, index + 2)
+      )
+    )
+    return [firstPage, ...remainingPages].flatMap((response) => response.requests)
+  }))
+
+  bookings.value = groups.flat().map((trip) => {
+    const fulfillment = trip.fulfillments[0]
+
+    return {
+      id: trip.id,
+      travel_request_id: trip.id,
+      user_id: trip.user_id,
+      applicant_name: trip.applicant_name,
+      department: '',
+      destination: trip.destination,
+      booking_code: '',
+      transportation_mode: trip.transportation_mode || '',
+      operator: fulfillment?.transport_details || null,
+      departure_at: null,
+      arrival_at: null,
+      hotel_name: fulfillment?.accommodation_details || null,
+      room_type: null,
+      check_in_date: null,
+      check_out_date: null,
+      travel_status: trip.status,
+      travel_start_date: trip.start_date,
+      travel_end_date: trip.end_date
+    }
+  })
+  hasStructuredBookings.value = false
+}
+
 const visibleBookings = computed(() => activeTab.value === 'TRANSPORTATION'
   ? bookings.value
   : bookings.value.filter((booking) =>
     Boolean(booking.hotel_name || booking.room_type || booking.check_in_date || booking.check_out_date)
   ))
+
 const lastPage = computed(() => Math.max(1, Math.ceil(visibleBookings.value.length / PAGE_SIZE)))
+const tableColumnCount = computed(() =>
+  activeTab.value === 'ACCOMMODATION' && !hasStructuredBookings.value ? 6 : 7
+)
 const paginatedBookings = computed(() => visibleBookings.value.slice(
   (currentPage.value - 1) * PAGE_SIZE,
   currentPage.value * PAGE_SIZE
@@ -155,11 +222,6 @@ const visiblePages = computed(() => {
   return Array.from({ length: end - start + 1 }, (_, index) => start + index)
 })
 
-const getStatusCode = (error: unknown) => {
-  const fetchError = error as FetchErrorLike
-  return fetchError.statusCode ?? fetchError.status
-}
-
 const loadBookings = async () => {
   if (!authToken.value) {
     await navigateTo('/login')
@@ -168,34 +230,40 @@ const loadBookings = async () => {
 
   isLoading.value = true
   loadError.value = ''
+
   try {
-    const firstPage = await $fetch<BookingsResponse>(`${API_BASE_URL}/bookings`, {
-      query: { page: 1, limit: API_PAGE_SIZE },
-      headers: { Authorization: `Bearer ${authToken.value}` }
+    const fetchPage = (page: number) => $fetch<BookingsResponse>(`${API_BASE_URL}/bookings`, {
+      query: { page, limit: API_PAGE_SIZE },
+      headers: {
+        Authorization: `Bearer ${authToken.value}`,
+        Accept: 'application/json'
+      }
     })
-    const pageNumbers = Array.from(
-      { length: Math.max(0, firstPage.pagination.total_pages - 1) },
-      (_, index) => index + 2
+
+    const firstPage = await fetchPage(1)
+    const remainingPages = await Promise.all(
+      Array.from(
+        { length: Math.max(0, firstPage.pagination.total_pages - 1) },
+        (_, index) => fetchPage(index + 2)
+      )
     )
-    const remainingPages = await Promise.all(pageNumbers.map((page) =>
-      $fetch<BookingsResponse>(`${API_BASE_URL}/bookings`, {
-        query: { page, limit: API_PAGE_SIZE },
-        headers: { Authorization: `Bearer ${authToken.value}` }
-      })
-    ))
+
     bookings.value = [firstPage, ...remainingPages].flatMap((response) => response.bookings)
+    hasStructuredBookings.value = bookings.value.length > 0
+    if (!hasStructuredBookings.value) {
+      await loadFulfillmentFallback()
+    }
     currentPage.value = 1
   } catch (error) {
     const fetchError = error as FetchErrorLike
-    const statusCode = getStatusCode(error)
-    if (statusCode === 401) {
+    if (getStatusCode(error) === 401) {
       authToken.value = null
       await navigateTo('/login')
       return
     }
 
     console.error('Gagal memuat daftar booking Admin Travel.', error)
-    loadError.value = statusCode === 403
+    loadError.value = getStatusCode(error) === 403
       ? 'Akses ditolak. Masuklah menggunakan akun Admin Travel atau Super Admin.'
       : fetchError.data?.message || fetchError.message || 'Daftar booking belum dapat dimuat dari server.'
   } finally {
@@ -245,6 +313,14 @@ onMounted(loadBookings)
       </button>
     </div>
 
+    <p
+      v-if="!isLoading && !loadError && !hasStructuredBookings && bookings.length > 0"
+      class="rounded-lg border border-[#e8d9b8] bg-[#fff9ed] px-4 py-3 text-xs text-[#80612b]"
+      role="status"
+    >
+      Data booking terstruktur belum tersedia. Menampilkan detail perjalanan yang tersedia; nomor booking dan jadwal aktual tidak disediakan oleh server.
+    </p>
+
     <section class="overflow-hidden rounded-xl border border-[#dfe8dc] bg-white" aria-labelledby="booking-list-heading">
       <h2 id="booking-list-heading" class="sr-only">Daftar Booking</h2>
 
@@ -254,23 +330,34 @@ onMounted(loadBookings)
             <tr>
               <th scope="col" class="px-2.5 py-2.5">Karyawan</th>
               <th scope="col" class="px-2.5 py-2.5">Tujuan</th>
-              <th v-for="column in activeColumns" :key="column.label" scope="col" class="px-2.5 py-2.5">{{ column.label }}</th>
+              <th v-if="activeTab === 'TRANSPORTATION'" scope="col" class="px-2.5 py-2.5">Moda</th>
+              <th v-else scope="col" class="px-2.5 py-2.5">{{ hasStructuredBookings ? 'Hotel' : 'Detail Akomodasi' }}</th>
+              <th scope="col" class="px-2.5 py-2.5">
+                {{ activeTab === 'TRANSPORTATION' ? 'No. Booking' : hasStructuredBookings ? 'Tipe Kamar' : 'Periode Perjalanan' }}
+              </th>
+              <th
+                v-if="activeTab === 'TRANSPORTATION' || hasStructuredBookings"
+                scope="col"
+                class="px-2.5 py-2.5"
+              >
+                {{ activeTab === 'TRANSPORTATION' ? 'Jadwal' : 'Check-in / Check-out' }}
+              </th>
               <th scope="col" class="px-2.5 py-2.5">Status Perjalanan</th>
               <th scope="col" class="px-2.5 py-2.5">Perjalanan</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-[#e8eee5] text-[#263b31]">
             <tr v-if="isLoading">
-              <td :colspan="columnCount" class="px-4 py-12 text-center text-xs text-[#7b8980]">Memuat booking...</td>
+              <td :colspan="tableColumnCount" class="px-4 py-12 text-center text-xs text-[#7b8980]">Memuat booking...</td>
             </tr>
             <tr v-else-if="loadError">
-              <td :colspan="columnCount" class="px-4 py-12 text-center text-xs text-[#a33c32]">Data booking belum dapat ditampilkan.</td>
+              <td :colspan="tableColumnCount" class="px-4 py-12 text-center text-xs text-[#a33c32]">Data booking belum dapat ditampilkan.</td>
             </tr>
             <tr v-else-if="paginatedBookings.length === 0">
-              <td :colspan="columnCount" class="px-4 py-12 text-center text-xs text-[#7b8980]">
+              <td :colspan="tableColumnCount" class="px-4 py-12 text-center text-xs text-[#7b8980]">
                 {{ activeTab === 'ACCOMMODATION' && bookings.length > 0
-                  ? 'Belum ada booking dengan detail akomodasi.'
-                  : 'Belum ada record booking. Seeder membuat data perjalanan dan fulfillment, tetapi tidak membuat booking terstruktur.' }}
+                  ? 'Belum ada detail akomodasi pada booking.'
+                  : 'Belum ada record booking di server.' }}
                 <NuxtLink
                   v-if="bookings.length === 0"
                   to="/admin-travel/antrean"
@@ -290,8 +377,21 @@ onMounted(loadBookings)
                 </div>
               </td>
               <td class="whitespace-nowrap px-2.5 py-3">{{ booking.destination }}</td>
-              <td v-for="column in activeColumns" :key="column.label" class="whitespace-nowrap px-2.5 py-3">
-                {{ column.render(booking) || '—' }}
+              <td v-if="activeTab === 'TRANSPORTATION'" class="whitespace-nowrap px-2.5 py-3">
+                {{ [booking.transportation_mode, booking.operator].filter(Boolean).join(' — ') || '—' }}
+              </td>
+              <td v-else class="max-w-[260px] px-2.5 py-3">
+                <span class="line-clamp-2">{{ booking.hotel_name || '—' }}</span>
+              </td>
+              <td class="whitespace-nowrap px-2.5 py-3">
+                {{ activeTab === 'TRANSPORTATION'
+                  ? booking.booking_code || (hasStructuredBookings ? '—' : 'Belum tersedia')
+                  : hasStructuredBookings ? booking.room_type || '—' : formatDateRange(booking.travel_start_date, booking.travel_end_date) }}
+              </td>
+              <td v-if="activeTab === 'TRANSPORTATION' || hasStructuredBookings" class="whitespace-nowrap px-2.5 py-3">
+                {{ activeTab === 'TRANSPORTATION'
+                  ? formatDateTime(booking.departure_at) || '—'
+                  : formatDateRange(booking.check_in_date, booking.check_out_date) }}
               </td>
               <td class="px-2.5 py-3">
                 <span class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] font-semibold" :class="statusStyles[booking.travel_status]">

@@ -32,7 +32,7 @@ onMounted(async () => {
   <div v-else class="flex min-h-screen bg-[#fdfbf7]">
     <Sidebar />
 
-    <div class="ml-[190px] flex min-h-screen min-w-0 flex-1 flex-col">
+    <div class="flex min-h-screen min-w-0 flex-1 flex-col md:ml-[190px]">
       <Navbar />
 
       <main class="flex-1 px-5 pb-5 pt-[64px] xl:px-6 xl:pb-6">
